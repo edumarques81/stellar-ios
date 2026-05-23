@@ -253,6 +253,40 @@ extension Color {
     static let audirvanaAccent   = Color(hex: "#6B4EA0")
 }
 
+// MARK: - ShapeStyle shorthand passthrough
+// Lets `.foregroundStyle(.mdPrimary)`, `.background(.mdSurfaceContainer, in: ...)`,
+// `.tint(.mdPrimary)` and friends resolve. Without this passthrough the dot-shorthand
+// can't find `Color.md*` members because the expected position is `some ShapeStyle`,
+// not `Color`.
+extension ShapeStyle where Self == Color {
+    static var mdPrimary:                  Color { Color.mdPrimary }
+    static var mdOnPrimary:                Color { Color.mdOnPrimary }
+    static var mdPrimaryContainer:         Color { Color.mdPrimaryContainer }
+    static var mdOnPrimaryContainer:       Color { Color.mdOnPrimaryContainer }
+    static var mdSecondary:                Color { Color.mdSecondary }
+    static var mdOnSecondary:              Color { Color.mdOnSecondary }
+    static var mdSecondaryContainer:       Color { Color.mdSecondaryContainer }
+    static var mdOnSecondaryContainer:     Color { Color.mdOnSecondaryContainer }
+    static var mdTertiary:                 Color { Color.mdTertiary }
+    static var mdTertiaryContainer:        Color { Color.mdTertiaryContainer }
+    static var mdOnTertiaryContainer:      Color { Color.mdOnTertiaryContainer }
+    static var mdBackground:               Color { Color.mdBackground }
+    static var mdOnBackground:             Color { Color.mdOnBackground }
+    static var mdSurface:                  Color { Color.mdSurface }
+    static var mdOnSurface:                Color { Color.mdOnSurface }
+    static var mdSurfaceVariant:           Color { Color.mdSurfaceVariant }
+    static var mdOnSurfaceVariant:         Color { Color.mdOnSurfaceVariant }
+    static var mdSurfaceContainerLowest:   Color { Color.mdSurfaceContainerLowest }
+    static var mdSurfaceContainerLow:      Color { Color.mdSurfaceContainerLow }
+    static var mdSurfaceContainer:         Color { Color.mdSurfaceContainer }
+    static var mdSurfaceContainerHigh:     Color { Color.mdSurfaceContainerHigh }
+    static var mdSurfaceContainerHighest:  Color { Color.mdSurfaceContainerHighest }
+    static var mdOutline:                  Color { Color.mdOutline }
+    static var mdOutlineVariant:           Color { Color.mdOutlineVariant }
+    static var mdError:                    Color { Color.mdError }
+    static var mdSuccess:                  Color { Color.mdSuccess }
+}
+
 // MARK: - Shape Tokens
 extension CGFloat {
     static let mdShapeNone: CGFloat = 0

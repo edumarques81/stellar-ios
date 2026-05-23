@@ -22,11 +22,6 @@ let package = Package(
                 .product(name: "SocketIO", package: "socket.io-client-swift")
             ],
             path: "StellarVolumiO"
-        ),
-        .testTarget(
-            name: "StellarVolumiOTests",
-            dependencies: ["StellarVolumiO"],
-            path: "StellarVolumiOTests"
         )
     ]
 )

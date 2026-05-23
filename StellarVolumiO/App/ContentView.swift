@@ -2,17 +2,11 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(SocketService.self) private var socket
-    @Environment(PlayerStore.self) private var player
-    @Environment(ThemeStore.self) private var themeStore
     @State private var selectedTab: Tab = .player
 
-    enum Tab { case player, queue, browse, favourites, settings }
+    enum Tab { case player, library, settings }
 
     var body: some View {
-        // Reading themeStore.theme ensures SwiftUI re-renders on theme change,
-        // which causes all Color.md* computed vars to resolve to the new palette.
-        let _ = themeStore.theme
-
         ZStack {
             Color.mdBackground.ignoresSafeArea()
 
@@ -21,25 +15,16 @@ struct ContentView: View {
                     .tabItem { Label("Playing", systemImage: "play.circle.fill") }
                     .tag(Tab.player)
 
-                QueueView()
-                    .tabItem { Label("Queue", systemImage: "list.bullet") }
-                    .tag(Tab.queue)
-
-                BrowseView()
-                    .tabItem { Label("Browse", systemImage: "folder") }
-                    .tag(Tab.browse)
-
-                FavoritesView()
-                    .tabItem { Label("Favourites", systemImage: "heart.fill") }
-                    .tag(Tab.favourites)
+                LibraryView()
+                    .tabItem { Label("Library", systemImage: "rectangle.stack.fill") }
+                    .tag(Tab.library)
 
                 SettingsView()
-                    .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                     .tag(Tab.settings)
             }
-            .tint(themeStore.theme.accentColor)
+            .tint(.mdPrimary)
 
-            // Connection overlay
             if socket.connectionState != .connected {
                 ConnectionOverlay()
             }

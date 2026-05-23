@@ -11,18 +11,20 @@ enum ConnectionState: Equatable {
 }
 
 // MARK: - Socket Service
-// Manages the Socket.IO connection to the Stellar/Volumio backend
-// Default host: stellar.local:3000
+// Manages the Socket.IO connection to the Stellar backend.
+//
+// The default host points at the current backend deployment. Edit this one
+// line when the backend host moves (Mac → Win/Linux/Pi).
+private let defaultHost = "192.168.86.221"
+private let defaultPort = 3000
 
 @Observable
 final class SocketService {
 
-    // MARK: - State
     var connectionState: ConnectionState = .disconnected
-    var serverHost: String = "stellar.local"
-    var serverPort: Int = 3000
+    var serverHost: String = defaultHost
+    var serverPort: Int = defaultPort
 
-    // MARK: - Private
     private var manager: SocketManager?
     private var socket: SocketIOClient?
     private var eventHandlers: [String: [(Any) -> Void]] = [:]
@@ -45,7 +47,7 @@ final class SocketService {
                 .reconnectWait(2),
                 .reconnectWaitMax(10),
                 .forcePolling(false),
-                .version(.three)        // Volumio uses Socket.IO v3 / EIO3
+                .version(.three)        // Stellar backend uses Socket.IO v3 / EIO3
             ]
         )
 
@@ -98,8 +100,7 @@ final class SocketService {
         }
     }
 
-    /// Subscribe to a socket event with raw `[Any]` data — use when the payload isn't
-    /// a flat Decodable (e.g. nested dicts like `pushAudirvanaStatus`).
+    /// Subscribe with raw `[Any]` payload — use when the wire shape isn't a flat Decodable.
     func onRaw(_ event: String, handler: @escaping ([Any]) -> Void) {
         socket?.on(event) { data, _ in
             DispatchQueue.main.async { handler(data) }
@@ -111,11 +112,9 @@ final class SocketService {
         socket?.on(clientEvent: .connect) { [weak self] _, _ in
             DispatchQueue.main.async {
                 self?.connectionState = .connected
-                // Ask backend for current state on connect
                 self?.socket?.emit("getState")
                 self?.socket?.emit("getQueue")
-                self?.socket?.emit("getAudioEngineState")
-                self?.socket?.emit("getAudirvanaStatus")
+                self?.socket?.emit("getLcdStatus")
             }
         }
 
@@ -133,34 +132,38 @@ final class SocketService {
         }
 
         socket?.on(clientEvent: .reconnect) { [weak self] _, _ in
-            DispatchQueue.main.async {
-                self?.connectionState = .connecting
-            }
+            DispatchQueue.main.async { self?.connectionState = .connecting }
         }
 
         socket?.on(clientEvent: .reconnectAttempt) { [weak self] _, _ in
-            DispatchQueue.main.async {
-                self?.connectionState = .connecting
-            }
+            DispatchQueue.main.async { self?.connectionState = .connecting }
         }
     }
 }
 
-// MARK: - Player Commands
+// MARK: - Transport Commands
 extension SocketService {
-    func play() { emit("play") }
-    func pause() { emit("pause") }
-    func playPause() { emit("toggle") }
-    func stop() { emit("stop") }
-    func prev() { emit("prev") }
-    func next() { emit("next") }
-    func seek(to seconds: Int) { emit("seek", data: [seconds]) }
-    func setVolume(_ volume: Int) { emit("volume", data: [volume]) }
-    func toggleMute() { emit("mute") }
-    func toggleShuffle(_ on: Bool) { emit("setRandom", data: [["value": on]]) }
-    func toggleRepeat(_ on: Bool) { emit("setRepeat", data: [["value": on]]) }
+    func play()     { emit("play") }
+    func pause()    { emit("pause") }
+    func playPause(){ emit("toggle") }
+    func stop()     { emit("stop") }
+    func prev()     { emit("prev") }
+    func next()     { emit("next") }
+    func seek(to seconds: Int)   { emit("seek", data: [seconds]) }
+    func setVolume(_ volume: Int){ emit("volume", data: [volume]) }
+    func toggleMute()            { emit("mute") }
+}
 
-    func switchEngine(to engine: AudioEngine) {
-        emit("switchAudioEngine", data: [["engine": engine.rawValue]])
+// MARK: - Library + LCD Commands
+extension SocketService {
+    /// Emit a payload with a single dictionary argument (matches the Volumio2-UI
+    /// `socketService.emit('event', payload)` shape).
+    func emitObject(_ event: String, _ payload: [String: Any]) {
+        guard isConnected else { return }
+        socket?.emit(event, payload)
     }
+
+    func lcdWake()     { emit("lcdWake") }
+    func lcdStandby()  { emit("lcdStandby") }
+    func getLcdStatus(){ emit("getLcdStatus") }
 }

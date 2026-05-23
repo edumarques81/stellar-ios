@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Player State
-// Mirrors the Volumio/Stellar backend pushState payload
+// Mirrors the Stellar backend pushState payload.
 
 struct PlayerState: Codable, Equatable {
     var status: PlaybackStatus
@@ -23,7 +23,6 @@ struct PlayerState: Codable, Equatable {
     var bitdepth: String    // "24"
     var channels: Int
 
-    // Convenience
     var seekSeconds: Double { Double(seek) / 1000 }
     var durationSeconds: Double { Double(duration) }
 
@@ -53,47 +52,6 @@ enum PlaybackStatus: String, Codable, Equatable {
     case play
     case pause
     case stop
-}
-
-// MARK: - Audio Engine
-struct AudioEngineState: Codable, Equatable {
-    var active: AudioEngine
-    var mpdRunning: Bool
-    var audirvanaRunning: Bool
-
-    static let `default` = AudioEngineState(
-        active: .mpd,
-        mpdRunning: true,
-        audirvanaRunning: false
-    )
-}
-
-enum AudioEngine: String, Codable, Equatable {
-    case mpd
-    case audirvana
-
-    var displayName: String {
-        switch self {
-        case .mpd: return "MPD"
-        case .audirvana: return "Audirvana"
-        }
-    }
-}
-
-// MARK: - Browse Items
-struct BrowseItem: Codable, Identifiable {
-    let id: String
-    let title: String
-    let artist: String?
-    let album: String?
-    let albumart: String?
-    let uri: String
-    let service: String
-    let type: String       // "album", "artist", "song", "folder" etc.
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumart, uri, service, type
-    }
 }
 
 // MARK: - Queue Item

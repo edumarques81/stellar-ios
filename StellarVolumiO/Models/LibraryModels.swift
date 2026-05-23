@@ -1,0 +1,122 @@
+import Foundation
+
+// MARK: - Library Album
+// Wire shape for `pushLibraryAlbums` + `pushLibraryArtistAlbums`. Matches the
+// payload produced by stellar backend `internal/transport/socketio/library_handlers.go`.
+
+struct LibraryAlbum: Codable, Identifiable, Equatable, Hashable {
+    let id: String       // synthetic — backend uses uri OR artist|album, see init(from:)
+    let title: String
+    let artist: String
+    let uri: String      // playable URI; empty for derived-from-tracks rows
+    let albumart: String // path or URL ('/albumart?path=...' shape)
+    let year: Int?
+    let trackCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case title, artist, uri, albumart, year, trackCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title       = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        artist      = try c.decodeIfPresent(String.self, forKey: .artist) ?? ""
+        uri         = try c.decodeIfPresent(String.self, forKey: .uri) ?? ""
+        albumart    = try c.decodeIfPresent(String.self, forKey: .albumart) ?? ""
+        year        = try c.decodeIfPresent(Int.self, forKey: .year)
+        trackCount  = try c.decodeIfPresent(Int.self, forKey: .trackCount)
+        id          = uri.isEmpty ? "\(artist)|\(title)" : uri
+    }
+
+    init(id: String, title: String, artist: String, uri: String, albumart: String, year: Int? = nil, trackCount: Int? = nil) {
+        self.id = id
+        self.title = title
+        self.artist = artist
+        self.uri = uri
+        self.albumart = albumart
+        self.year = year
+        self.trackCount = trackCount
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(title, forKey: .title)
+        try c.encode(artist, forKey: .artist)
+        try c.encode(uri, forKey: .uri)
+        try c.encode(albumart, forKey: .albumart)
+        try c.encodeIfPresent(year, forKey: .year)
+        try c.encodeIfPresent(trackCount, forKey: .trackCount)
+    }
+}
+
+// MARK: - Library Artist
+struct LibraryArtist: Codable, Identifiable, Equatable, Hashable {
+    let id: String      // synthetic from name (backend doesn't always send a stable id)
+    let name: String
+    let albumCount: Int?
+    let artistImage: String?    // optional artist image path; backend may omit
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, albumCount, artistImage
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedName = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        name = decodedName
+        albumCount  = try c.decodeIfPresent(Int.self, forKey: .albumCount)
+        artistImage = try c.decodeIfPresent(String.self, forKey: .artistImage)
+        let decodedId = try c.decodeIfPresent(String.self, forKey: .id)
+        id = decodedId ?? decodedName
+    }
+
+    init(id: String, name: String, albumCount: Int? = nil, artistImage: String? = nil) {
+        self.id = id
+        self.name = name
+        self.albumCount = albumCount
+        self.artistImage = artistImage
+    }
+}
+
+// MARK: - Wire envelopes (push* payloads)
+
+struct PushLibraryAlbums: Codable {
+    let albums: [LibraryAlbum]
+    let total: Int?
+}
+
+struct PushLibraryArtists: Codable {
+    let artists: [LibraryArtist]
+    let total: Int?
+}
+
+struct PushLibraryArtistAlbums: Codable {
+    let artist: String?
+    let albums: [LibraryAlbum]
+}
+
+// MARK: - LCD Status
+struct LcdStatus: Decodable, Equatable {
+    let isOn: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case isOn
+        case state          // some firmware sends 'state' string instead
+        case on             // ...or 'on' bool
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .isOn) {
+            isOn = v
+        } else if let v = try c.decodeIfPresent(Bool.self, forKey: .on) {
+            isOn = v
+        } else if let s = try c.decodeIfPresent(String.self, forKey: .state) {
+            isOn = (s.lowercased() == "on" || s.lowercased() == "wake")
+        } else {
+            isOn = true
+        }
+    }
+
+    init(isOn: Bool) { self.isOn = isOn }
+}
