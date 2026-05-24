@@ -6,7 +6,9 @@
 
 **Architecture:** Keep the existing 17-file skeleton (`5971ce0` strip-down baseline). Add tolerant per-event parsers, surface decode errors as an observable on `SocketService`, extract Now Playing into three subviews (Playing / Idle / Empty), promote `ArtistDetailView` to its own file, and restyle every view with redesign design tokens (`#d4af6a` gold accent, deep near-black backgrounds, glassy gradients). All stores remain `@Observable`.
 
-**Tech Stack:** Swift 6 + SwiftUI, iOS 17+, `SocketIO-Client-Swift` v16 (Socket.IO v3 / EIO3), SPM library target for unit tests via `swift test`, xcodegen-built `.xcodeproj` for device installs.
+**Tech Stack:** Swift 6 + SwiftUI, iOS 17+, `SocketIO-Client-Swift` v16 (Socket.IO v3 / EIO3), xcodegen-built `.xcodeproj` (drives both unit tests via `xcodebuild test` on an iOS simulator and device installs).
+
+**Note on the test runner:** The library uses `@Observable` (iOS 17+) and UIKit-backed SwiftUI APIs, so `swift test` on a macOS host cannot compile it. All compile / test commands in this plan go through `xcodebuild` on the iPhone 16 Pro simulator, fronted by two wrapper scripts created in Task 0.1 (`scripts/build.sh`, `scripts/test.sh`). Keep an iPhone 16 Pro simulator booted while executing the plan (`xcrun simctl boot 'iPhone 16 Pro'` if not already up).
 
 **Spec:** `docs/superpowers/specs/2026-05-24-ios-remote-redesign-design.md`
 
@@ -18,7 +20,7 @@
 
 | Phase | What ships | Verifiable outcome |
 | --- | --- | --- |
-| 0 | SPM test target | `swift test` runs and one smoke test passes |
+| 0 | xcodegen test target + wrapper scripts | `scripts/test.sh SmokeTest` passes |
 | 1 | Decode-bug fix + LastPlayed wiring | Now Playing shows live state; Library populates; lastDecodeError surfaces on malformed payloads |
 | 2 | Design tokens additions | `DesignTokens+Redesign.swift` compiled; new tokens reachable from views |
 | 3 | Now Playing rebuild | Playing / Idle / Empty subviews render correctly against live backend |
@@ -32,36 +34,63 @@ Suggested `/clear` between phases when running subagent-driven execution.
 
 ## Phase 0 — Test infrastructure
 
-The repo has no test target today. We add one as a SPM test target so unit tests run on the host via `swift test` (no simulator needed) and stay fast. The xcodegen `.xcodeproj` does not need a test target — iOS-specific tests aren't in scope; everything we test is pure Swift logic.
+The repo has no test target today. We add one to the xcodegen `project.yml` so tests build and run via `xcodebuild test` against an iOS simulator. `swift test` on the macOS host is NOT viable because the library uses `@Observable` (iOS 17+) and SwiftUI APIs that have no macOS equivalent.
 
-### Task 0.1: Add SPM test target
+`Package.swift` stays untouched in Task 0.1. If a prior partial attempt added a `.testTarget` block to `Package.swift`, revert that — SPM tests aren't on the table.
+
+### Task 0.1: Add xcodegen test target + wrapper scripts
 
 **Files:**
-- Modify: `Package.swift`
+- Read first: `project.yml` — to see the current target/scheme shape.
+- Modify: `project.yml`
+- Create: `scripts/build.sh`
+- Create: `scripts/test.sh`
 - Create: `StellarVolumiOTests/SmokeTest.swift`
+- Possibly revert: `Package.swift` (if a previous attempt added a `.testTarget`)
 
-- [ ] **Step 1: Modify `Package.swift` to declare the test target**
+- [ ] **Step 1: Revert any stale `Package.swift` edits**
 
-Open `Package.swift` and replace the `targets:` block with:
+Run: `git diff Package.swift`. If it shows any change (e.g. a `.testTarget` block), run `git checkout -- Package.swift` to revert. `Package.swift` must end up identical to git HEAD.
 
-```swift
-    targets: [
-        .target(
-            name: "StellarVolumiO",
-            dependencies: [
-                .product(name: "SocketIO", package: "socket.io-client-swift")
-            ],
-            path: "StellarVolumiO"
-        ),
-        .testTarget(
-            name: "StellarVolumiOTests",
-            dependencies: ["StellarVolumiO"],
-            path: "StellarVolumiOTests"
-        )
-    ]
+- [ ] **Step 2: Add the test target to `project.yml`**
+
+Open `project.yml`. Under the existing `targets:` block (which currently declares only `StellarVolumiO`), append the test target — at the same indentation as `StellarVolumiO:`:
+
+```yaml
+  StellarVolumiOTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: StellarVolumiOTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fit.stellar.remote.tests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/StellarVolumiO.app/$(BUNDLE_EXECUTABLE_NAME:default=StellarVolumiO)"
+    dependencies:
+      - target: StellarVolumiO
 ```
 
-- [ ] **Step 2: Create the smoke test**
+And at the bottom of the file, append a scheme block so `xcodebuild test -scheme StellarVolumiO` includes the test target:
+
+```yaml
+schemes:
+  StellarVolumiO:
+    build:
+      targets:
+        StellarVolumiO: all
+        StellarVolumiOTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - StellarVolumiOTests
+```
+
+- [ ] **Step 3: Create the smoke test**
 
 Write `StellarVolumiOTests/SmokeTest.swift`:
 
@@ -76,17 +105,71 @@ final class SmokeTest: XCTestCase {
 }
 ```
 
-- [ ] **Step 3: Run the test**
+If this file already exists from a prior attempt, leave it — the content matches.
 
-Run: `swift test --filter SmokeTest`
-Expected: `Test Suite 'SmokeTest' passed`. If you see "no such module 'StellarVolumiO'", the library target may need `// swift-tools-version: 5.9` already present (verify line 1 of Package.swift).
+- [ ] **Step 4: Create `scripts/build.sh`**
 
-- [ ] **Step 4: Commit**
+Create `scripts/build.sh`:
 
 ```bash
-git add Package.swift StellarVolumiOTests/SmokeTest.swift
-git commit -m "test(infra): add SPM test target StellarVolumiOTests"
+#!/bin/bash
+# Build the iOS app for the iPhone 16 Pro simulator. Used as the compile-check
+# after each code change during plan execution.
+set -euo pipefail
+exec xcodebuild \
+  -scheme StellarVolumiO \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+  build -quiet
 ```
+
+Make it executable: `chmod +x scripts/build.sh`.
+
+- [ ] **Step 5: Create `scripts/test.sh`**
+
+Create `scripts/test.sh`:
+
+```bash
+#!/bin/bash
+# Run StellarVolumiOTests via xcodebuild on the iPhone 16 Pro simulator.
+#
+# Usage:
+#   scripts/test.sh                          # all tests
+#   scripts/test.sh PlayerStateParserTests   # filter to one suite
+set -euo pipefail
+if [ $# -eq 0 ]; then
+  exec xcodebuild test \
+    -scheme StellarVolumiO \
+    -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+    -quiet
+else
+  exec xcodebuild test \
+    -scheme StellarVolumiO \
+    -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+    -only-testing:"StellarVolumiOTests/$1" \
+    -quiet
+fi
+```
+
+Make it executable: `chmod +x scripts/test.sh`.
+
+- [ ] **Step 6: Regenerate the xcodeproj and run the smoke test**
+
+Run: `xcodegen generate --spec project.yml`
+Expected: `Generated project successfully`.
+
+Boot the simulator if needed: `xcrun simctl boot 'iPhone 16 Pro' 2>/dev/null || true`.
+
+Run: `scripts/test.sh SmokeTest`
+Expected: output ends with something like `Test Suite 'SmokeTest' passed` and `** TEST SUCCEEDED **`. First run is slow (simulator + first build); subsequent runs ~5s.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add project.yml scripts/build.sh scripts/test.sh StellarVolumiOTests/SmokeTest.swift
+git commit -m "test(infra): xcodegen test target + scripts/build.sh + scripts/test.sh"
+```
+
+Do NOT commit the regenerated `.xcodeproj` — it's already in `.gitignore` (line 5: `*.xcodeproj`).
 
 ---
 
@@ -212,8 +295,8 @@ enum Fixtures {
 
 - [ ] **Step 2: Verify the file compiles**
 
-Run: `swift build`
-Expected: `Build complete!`
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3: Commit**
 
@@ -292,7 +375,7 @@ final class PlayerStateParserTests: XCTestCase {
 
 - [ ] **Step 2: Run the test to confirm it fails**
 
-Run: `swift test --filter PlayerStateParserTests`
+Run: `scripts/test.sh PlayerStateParserTests`
 Expected: compile error — `PlayerState.init(rawDict:)` does not exist.
 
 - [ ] **Step 3: Implement `PlayerState.init(rawDict:)`**
@@ -346,7 +429,7 @@ extension PlayerState {
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `swift test --filter PlayerStateParserTests`
+Run: `scripts/test.sh PlayerStateParserTests`
 Expected: 5 tests passed.
 
 - [ ] **Step 5: Commit**
@@ -406,7 +489,7 @@ final class LibraryEnvelopeParserTests: XCTestCase {
 
 - [ ] **Step 2: Run to confirm it fails**
 
-Run: `swift test --filter LibraryEnvelopeParserTests`
+Run: `scripts/test.sh LibraryEnvelopeParserTests`
 Expected: compile error — `PushLibraryAlbums.init(rawDict:)` does not exist.
 
 - [ ] **Step 3: Implement**
@@ -481,7 +564,7 @@ extension LibraryArtist {
 
 - [ ] **Step 4: Run to confirm passing**
 
-Run: `swift test --filter LibraryEnvelopeParserTests`
+Run: `scripts/test.sh LibraryEnvelopeParserTests`
 Expected: 4 tests passed.
 
 - [ ] **Step 5: Commit**
@@ -522,7 +605,7 @@ Append to `StellarVolumiOTests/LibraryEnvelopeParserTests.swift`, inside the exi
 
 - [ ] **Step 2: Run to confirm passing**
 
-Run: `swift test --filter LibraryEnvelopeParserTests`
+Run: `scripts/test.sh LibraryEnvelopeParserTests`
 Expected: 6 tests passed.
 
 - [ ] **Step 3: Commit**
@@ -580,7 +663,7 @@ final class LastPlayedAlbumTests: XCTestCase {
 
 - [ ] **Step 2: Run to confirm it fails**
 
-Run: `swift test --filter LastPlayedAlbumTests`
+Run: `scripts/test.sh LastPlayedAlbumTests`
 Expected: compile error — `LastPlayedAlbum` doesn't exist.
 
 - [ ] **Step 3: Implement**
@@ -619,7 +702,7 @@ struct LastPlayedAlbum: Equatable {
 
 - [ ] **Step 4: Run to confirm passing**
 
-Run: `swift test --filter LastPlayedAlbumTests`
+Run: `scripts/test.sh LastPlayedAlbumTests`
 Expected: 3 tests passed.
 
 - [ ] **Step 5: Commit**
@@ -741,8 +824,8 @@ Replace with:
 
 - [ ] **Step 2: Build to verify no compile breakage**
 
-Run: `swift build`
-Expected: `Build complete!`
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3: Commit**
 
@@ -786,8 +869,8 @@ Open `StellarVolumiO/Stores/PlayerStore.swift` and replace the `bind(to:)` metho
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 3: Commit**
 
@@ -840,8 +923,8 @@ Open `StellarVolumiO/Stores/ArtistPickerStore.swift` and replace the `bind(to:)`
 
 - [ ] **Step 3: Build**
 
-Run: `swift build`
-Expected: `Build complete!`
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 4: Commit**
 
@@ -954,8 +1037,8 @@ struct StellarApp: App {
 
 - [ ] **Step 3: Build**
 
-Run: `swift build`
-Expected: `Build complete!`
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Step 4: Commit**
 
@@ -1076,15 +1159,15 @@ extension SocketService {
 
 - [ ] **Step 4: Run the new tests**
 
-Run: `swift test --filter LastPlayedStoreTests`
+Run: `scripts/test.sh LastPlayedStoreTests`
 Expected: 3 tests passed.
 
-Run: `swift test --filter SocketDecodeErrorSurfaceTests`
+Run: `scripts/test.sh SocketDecodeErrorSurfaceTests`
 Expected: 2 tests passed.
 
 Run the full suite to confirm no regressions:
 
-Run: `swift test`
+Run: `scripts/test.sh`
 Expected: all suites passed.
 
 - [ ] **Step 5: Commit**
@@ -1236,8 +1319,8 @@ struct StellarGlassyBackground: View {
 
 - [ ] **Step 3: Build**
 
-Run: `swift build`
-Expected: `Build complete!` — if you get "ambiguous use of 'Color'" anywhere, rename `Stellar.Color` → `Stellar.Palette` (and update references).
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **` — if you get "ambiguous use of 'Color'" anywhere, rename `Stellar.Color` → `Stellar.Palette` (and update references).
 
 - [ ] **Step 4: Commit**
 
@@ -1306,7 +1389,7 @@ final class PlayerStoreOptimisticTests: XCTestCase {
 
 - [ ] **Step 2: Run to confirm it fails**
 
-Run: `swift test --filter PlayerStoreOptimisticTests`
+Run: `scripts/test.sh PlayerStoreOptimisticTests`
 Expected: compile error — `applyOptimistic` / `receiveServerState` / `optimisticStatus` don't exist.
 
 - [ ] **Step 3: Extend `PlayerStore`**
@@ -1385,8 +1468,8 @@ d) Update `bind(to:)` to call `receiveServerState` instead of mutating `state` d
 
 - [ ] **Step 4: Run tests**
 
-Run: `swift test --filter PlayerStoreOptimisticTests`
-Expected: 3 tests passed. Also run `swift test --filter PlayerStateParserTests LibraryEnvelopeParserTests LastPlayedAlbumTests` to confirm no regressions in earlier suites.
+Run: `scripts/test.sh PlayerStoreOptimisticTests`
+Expected: 3 tests passed. Also run `scripts/test.sh PlayerStateParserTests`, `scripts/test.sh LibraryEnvelopeParserTests`, `scripts/test.sh LastPlayedAlbumTests` to confirm no regressions in earlier suites.
 
 - [ ] **Step 5: Commit**
 
@@ -1496,8 +1579,8 @@ struct FormatBadgeStrip: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -1567,8 +1650,8 @@ struct SeekBar: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -1711,8 +1794,8 @@ private struct TransportIconButton: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -1836,8 +1919,8 @@ private struct AlbumArtHero: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -1884,8 +1967,8 @@ struct NowPlayingEmptyView: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -2058,8 +2141,8 @@ Replace `ArtistAlbumsView(artist: artist)` with `ArtistDetailView(artist: artist
 
 - [ ] **Step 3: Build**
 
-Run: `swift build`
-Expected: `Build complete!`. If `AlbumRow` becomes undefined, copy its declaration into `ArtistDetailView.swift` as a `private struct AlbumRow` mirroring the original source.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`. If `AlbumRow` becomes undefined, copy its declaration into `ArtistDetailView.swift` as a `private struct AlbumRow` mirroring the original source.
 
 - [ ] **Step 4: Commit**
 
@@ -2125,8 +2208,8 @@ If the file declared a different initial-load orchestration (e.g. `.onAppear` ca
 
 - [ ] **Step 3: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 4: Commit**
 
@@ -2226,8 +2309,8 @@ private struct AlbumTile: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -2284,8 +2367,8 @@ struct ArtistPickerView: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`. If you see "Hashable required by NavigationLink(value:)" — confirm `LibraryArtist` already conforms to `Hashable` (it does, per Models/LibraryModels.swift:53).
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`. If you see "Hashable required by NavigationLink(value:)" — confirm `LibraryArtist` already conforms to `Hashable` (it does, per Models/LibraryModels.swift:53).
 
 - [ ] **Step 3: Commit**
 
@@ -2386,8 +2469,8 @@ private struct AlbumTile: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -2472,7 +2555,7 @@ final class ConnectionGraceTests: XCTestCase {
 
 - [ ] **Step 2: Run to confirm it fails**
 
-Run: `swift test --filter ConnectionGraceTests`
+Run: `scripts/test.sh ConnectionGraceTests`
 Expected: compile error — `reportedConnectionState` / `markDisconnectedInternal` don't exist.
 
 - [ ] **Step 3: Implement on `SocketService`**
@@ -2541,7 +2624,7 @@ And in the connect handler, after `self?.connectionState = .connected`, add:
 
 - [ ] **Step 4: Run tests**
 
-Run: `swift test --filter ConnectionGraceTests`
+Run: `scripts/test.sh ConnectionGraceTests`
 Expected: 2 tests passed (each waits ~5 s — be patient).
 
 - [ ] **Step 5: Commit**
@@ -2616,8 +2699,8 @@ struct ConnectionStatusRow: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -2664,8 +2747,8 @@ struct DecodeErrorRow: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
@@ -2733,8 +2816,8 @@ struct SettingsView: View {
 
 - [ ] **Step 2: Build**
 
-Run: `swift build`
-Expected: `Build complete!`.
+Run: `scripts/build.sh`
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Commit**
 
