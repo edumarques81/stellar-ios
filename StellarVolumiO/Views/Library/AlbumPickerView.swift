@@ -4,62 +4,81 @@ struct AlbumPickerView: View {
     @Environment(AlbumPickerStore.self) private var store
     @Environment(SocketService.self) private var socket
 
+    private let columns = [
+        GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 12)
+    ]
+
     var body: some View {
-        Group {
-            if store.loading && store.albums.isEmpty {
-                ProgressView("Loading albums…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .foregroundStyle(.mdOnSurfaceVariant)
-            } else if store.albums.isEmpty {
-                emptyState
-            } else {
-                albumList
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(store.albums) { album in
+                    AlbumTile(album: album) { store.play(album) }
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
+        .scrollIndicators(.hidden)
         .onAppear {
-            if store.albums.isEmpty { store.load() }
+            if store.albums.isEmpty && !store.loading { store.load() }
         }
     }
+}
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "rectangle.stack")
-                .font(.system(size: 40))
-                .foregroundStyle(.mdOnSurfaceVariant.opacity(0.6))
-            Text("No albums yet")
-                .font(StellarFont.titleMedium)
-                .foregroundStyle(.mdOnSurfaceVariant)
-            Button {
-                store.load()
-            } label: {
-                Text("Reload")
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
+private struct AlbumTile: View {
+    let album: LibraryAlbum
+    let onTap: () -> Void
+
+    @Environment(SocketService.self) private var socket
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack {
+                    Rectangle()
+                        .fill(LinearGradient(
+                            colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
+                                     SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                    if let url = artworkURL {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            EmptyView()
+                        }
+                    }
+                }
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Text(album.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+
+                Text(album.artist)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.bordered)
-            .tint(.mdPrimary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .buttonStyle(.plain)
     }
 
-    private var albumList: some View {
-        List(store.albums) { album in
-            Button {
-                store.play(album)
-            } label: {
-                AlbumRow(album: album, socket: socket)
-            }
-            .listRowBackground(Color.mdSurfaceContainerLow)
-            .listRowSeparatorTint(.mdOutlineVariant.opacity(0.3))
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.mdBackground)
-        .refreshable { store.load() }
+    private var artworkURL: URL? {
+        let s = album.albumart
+        guard !s.isEmpty else { return nil }
+        if s.hasPrefix("http") { return URL(string: s) }
+        let path = s.hasPrefix("/") ? s : "/\(s)"
+        return URL(string: "http://\(socket.serverHost):\(socket.serverPort)\(path)")
     }
 }
 
 // MARK: - Album row
+// Preserved for ArtistDetailView (Task 4.1 still uses AlbumRow; Task 4.5 will
+// migrate that callsite to its own tile and orphan this).
 
 struct AlbumRow: View {
     let album: LibraryAlbum
