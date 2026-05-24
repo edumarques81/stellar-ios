@@ -124,10 +124,12 @@ struct LcdStatus: Decodable, Equatable {
 // MARK: - Tolerant envelope parsers
 //
 // Each `init(rawDict:)` accepts the raw [String: Any] that came out of
-// Socket.IO and routes the nested album / artist dicts through the existing
-// tolerant `Codable` decoders on LibraryAlbum / LibraryArtist via a
-// JSONSerialization round-trip. Two-phase is OK here — the dicts are small
-// and this only fires once per push.
+// Socket.IO and reads the nested album / artist dicts directly (no
+// JSONSerialization round-trip). Missing keys fall back to "" for strings
+// or nil for Optionals. The per-row initialisers (LibraryAlbum/LibraryArtist
+// `init?(rawDict:)`, defined below) carry the same defensive defaults so
+// a malformed row produces a row with empty fields rather than a parse
+// failure for the whole envelope.
 
 extension PushLibraryAlbums {
     init?(rawDict d: [String: Any]) {
@@ -161,7 +163,7 @@ extension PushLibraryArtistAlbums {
 
 extension LibraryAlbum {
     /// Dict-based tolerant init — mirrors the existing JSONDecoder
-    /// `init(from:)` but skips the JSONSerialization roundtrip.
+    /// `init(from:)` shape but reads the dict directly.
     init?(rawDict d: [String: Any]) {
         let title    = d["title"]    as? String ?? ""
         let artist   = d["artist"]   as? String ?? ""

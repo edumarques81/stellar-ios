@@ -30,4 +30,18 @@ final class LibraryEnvelopeParserTests: XCTestCase {
         XCTAssertNotNil(env, "envelope still constructs even with empty payload")
         XCTAssertEqual(env?.albums.count, 0)
     }
+
+    func testPushLibraryAlbumsNonArrayAlbumsKey() {
+        // Backend-shape drift defence: if `albums` is a non-array (e.g. Int or
+        // String), the envelope must still construct with zero rows rather
+        // than crash or skip the envelope. Pins the `as? [[String: Any]] ?? []`
+        // fallback in PushLibraryAlbums.init?(rawDict:).
+        let env5 = PushLibraryAlbums(rawDict: ["albums": 5])
+        XCTAssertNotNil(env5)
+        XCTAssertEqual(env5?.albums.count, 0)
+
+        let envStr = PushLibraryAlbums(rawDict: ["albums": "wrong"])
+        XCTAssertNotNil(envStr)
+        XCTAssertEqual(envStr?.albums.count, 0)
+    }
 }
