@@ -120,3 +120,67 @@ struct LcdStatus: Decodable, Equatable {
 
     init(isOn: Bool) { self.isOn = isOn }
 }
+
+// MARK: - Tolerant envelope parsers
+//
+// Each `init(rawDict:)` accepts the raw [String: Any] that came out of
+// Socket.IO and routes the nested album / artist dicts through the existing
+// tolerant `Codable` decoders on LibraryAlbum / LibraryArtist via a
+// JSONSerialization round-trip. Two-phase is OK here — the dicts are small
+// and this only fires once per push.
+
+extension PushLibraryAlbums {
+    init?(rawDict d: [String: Any]) {
+        let rawAlbums = d["albums"] as? [[String: Any]] ?? []
+        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }
+        let total = d["total"] as? Int
+        self.albums = albums
+        self.total = total
+    }
+}
+
+extension PushLibraryArtists {
+    init?(rawDict d: [String: Any]) {
+        let rawArtists = d["artists"] as? [[String: Any]] ?? []
+        let artists = rawArtists.compactMap { LibraryArtist(rawDict: $0) }
+        let total = d["total"] as? Int
+        self.artists = artists
+        self.total = total
+    }
+}
+
+extension PushLibraryArtistAlbums {
+    init?(rawDict d: [String: Any]) {
+        let rawAlbums = d["albums"] as? [[String: Any]] ?? []
+        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }
+        let artist = d["artist"] as? String
+        self.artist = artist
+        self.albums = albums
+    }
+}
+
+extension LibraryAlbum {
+    /// Dict-based tolerant init — mirrors the existing JSONDecoder
+    /// `init(from:)` but skips the JSONSerialization roundtrip.
+    init?(rawDict d: [String: Any]) {
+        let title    = d["title"]    as? String ?? ""
+        let artist   = d["artist"]   as? String ?? ""
+        let uri      = d["uri"]      as? String ?? ""
+        let albumart = d["albumart"] as? String ?? ""
+        let year     = d["year"] as? Int
+        let trackCount = d["trackCount"] as? Int
+        let id = uri.isEmpty ? "\(artist)|\(title)" : uri
+        self.init(id: id, title: title, artist: artist, uri: uri,
+                  albumart: albumart, year: year, trackCount: trackCount)
+    }
+}
+
+extension LibraryArtist {
+    init?(rawDict d: [String: Any]) {
+        let name = d["name"] as? String ?? ""
+        let id   = (d["id"] as? String) ?? name
+        let albumCount  = d["albumCount"]  as? Int
+        let artistImage = d["artistImage"] as? String
+        self.init(id: id, name: name, albumCount: albumCount, artistImage: artistImage)
+    }
+}
