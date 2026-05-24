@@ -21,7 +21,16 @@ private let defaultPort = 3000
 @Observable
 final class SocketService {
 
-    var connectionState: ConnectionState = .disconnected
+    var connectionState: ConnectionState = .disconnected {
+        didSet {
+            // Any transition back to .connected — whether from a socket
+            // .connect event or a direct test assignment — cancels the
+            // in-flight grace timer so the UI doesn't later flip red.
+            if case .connected = connectionState {
+                clearGraceWindow()
+            }
+        }
+    }
     var serverHost: String = defaultHost
     var serverPort: Int = defaultPort
 
@@ -29,6 +38,19 @@ final class SocketService {
     /// failed". `nil` when the last incoming payload decoded cleanly.
     /// Surfaced in the Settings → ConnectionStatusRow diagnostic.
     var lastDecodeError: String? = nil
+
+    /// UI-facing view of the connection state. During the 5-second
+    /// post-disconnect grace, this returns `.connecting` so the UI shows a
+    /// spinner rather than a red error. Mirrors Volumio2-UI's
+    /// `DISCONNECT_GRACE_PERIOD_MS = 5000`.
+    var reportedConnectionState: ConnectionState {
+        if isInGraceWindow { return .connecting }
+        return connectionState
+    }
+
+    private var isInGraceWindow: Bool = false
+    private var graceTask: Task<Void, Never>? = nil
+    static let disconnectGraceSeconds: Double = 5.0
 
     private var manager: SocketManager?
     private var socket: SocketIOClient?
@@ -94,6 +116,35 @@ final class SocketService {
     func reconnectIfNeeded() {
         guard connectionState != .connected, connectionState != .connecting else { return }
         connect()
+    }
+
+    /// Test-visible hook + production entry point: socket reports disconnect.
+    /// Sets the raw `connectionState` to `.disconnected` so callers see truth,
+    /// then starts the 5-second grace timer; `reportedConnectionState` will
+    /// surface `.connecting` (spinner) during the window. If a reconnect
+    /// arrives before it expires, the timer is cancelled and the UI never
+    /// sees the red state.
+    func markDisconnectedInternal() {
+        // Defensive: don't start a second timer if one is already running.
+        guard !isInGraceWindow else { return }
+
+        isInGraceWindow = true
+        connectionState = .disconnected
+        graceTask?.cancel()
+        graceTask = Task { @MainActor [weak self] in
+            let ns = UInt64(Self.disconnectGraceSeconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: ns)
+            self?.isInGraceWindow = false
+            self?.graceTask?.cancel()
+        }
+    }
+
+    /// Cancel any pending grace timer and clear the grace flag — call on
+    /// reconnect so the UI doesn't later flip to `.disconnected`.
+    private func clearGraceWindow() {
+        isInGraceWindow = false
+        graceTask?.cancel()
+        graceTask = nil
     }
 
     // MARK: - Emit
@@ -202,6 +253,9 @@ final class SocketService {
     private func setupHandlers() {
         socket?.on(clientEvent: .connect) { [weak self] _, _ in
             DispatchQueue.main.async {
+                // Reconnect during grace: cancel timer so the UI doesn't
+                // later flip to .disconnected after the connection is back.
+                self?.clearGraceWindow()
                 self?.connectionState = .connected
                 self?.socket?.emit("getState")
                 self?.socket?.emit("getQueue")
@@ -211,7 +265,10 @@ final class SocketService {
 
         socket?.on(clientEvent: .disconnect) { [weak self] _, _ in
             DispatchQueue.main.async {
-                self?.connectionState = .disconnected
+                // markDisconnectedInternal sets connectionState = .disconnected
+                // AND starts the 5s grace window so reportedConnectionState
+                // reads .connecting (spinner) during the grace period.
+                self?.markDisconnectedInternal()
             }
         }
 
