@@ -25,6 +25,11 @@ final class SocketService {
     var serverHost: String = defaultHost
     var serverPort: Int = defaultPort
 
+    /// One-line summary of the last failed decode, e.g. "pushState: dict cast
+    /// failed". `nil` when the last incoming payload decoded cleanly.
+    /// Surfaced in the Settings → ConnectionStatusRow diagnostic.
+    var lastDecodeError: String? = nil
+
     private var manager: SocketManager?
     private var socket: SocketIOClient?
     private var eventHandlers: [String: [(Any) -> Void]] = [:]
@@ -80,18 +85,74 @@ final class SocketService {
 
     // MARK: - Subscribe
     func on<T: Decodable>(_ event: String, handler: @escaping (T) -> Void) {
-        let wrapper: (Any) -> Void = { data in
+        let wrapper: (Any) -> Void = { [weak self] data in
             guard let arr = data as? [Any], let first = arr.first else { return }
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: first)
                 let decoded = try JSONDecoder().decode(T.self, from: jsonData)
-                DispatchQueue.main.async { handler(decoded) }
+                DispatchQueue.main.async {
+                    self?.lastDecodeError = nil
+                    handler(decoded)
+                }
             } catch {
-                // Silently ignore decode errors — backend shape may vary
+                DispatchQueue.main.async {
+                    self?.lastDecodeError = "\(event): \(error.localizedDescription)"
+                }
             }
         }
         eventHandlers[event, default: []].append(wrapper)
         socket?.on(event, callback: { data, _ in wrapper(data) })
+    }
+
+    /// Subscribe to a Socket.IO event where the wire payload is a
+    /// `[String: Any]` dict (typical Volumio shape). Caller provides a
+    /// tolerant parser; on `nil` we populate `lastDecodeError`.
+    func onRawDict<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T) -> Void) {
+        socket?.on(event) { [weak self] data, _ in
+            guard let arr = data as? [Any], let first = arr.first else {
+                DispatchQueue.main.async { self?.lastDecodeError = "\(event): empty payload" }
+                return
+            }
+            guard let dict = first as? [String: Any] else {
+                DispatchQueue.main.async { self?.lastDecodeError = "\(event): payload not a dict" }
+                return
+            }
+            guard let parsed = parser(dict) else {
+                DispatchQueue.main.async { self?.lastDecodeError = "\(event): parser rejected payload" }
+                return
+            }
+            DispatchQueue.main.async {
+                self?.lastDecodeError = nil
+                handler(parsed)
+            }
+        }
+    }
+
+    /// Variant that allows the payload to be `NSNull` (e.g.
+    /// pushLastPlayedAlbum on a fresh backend) — passes `nil` to the handler.
+    func onRawDictNullable<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T?) -> Void) {
+        socket?.on(event) { [weak self] data, _ in
+            let first = (data as? [Any])?.first
+            if first is NSNull || first == nil {
+                DispatchQueue.main.async {
+                    self?.lastDecodeError = nil
+                    handler(nil)
+                }
+                return
+            }
+            guard let dict = first as? [String: Any] else {
+                DispatchQueue.main.async { self?.lastDecodeError = "\(event): payload not a dict" }
+                return
+            }
+            DispatchQueue.main.async {
+                if let parsed = parser(dict) {
+                    self?.lastDecodeError = nil
+                    handler(parsed)
+                } else {
+                    self?.lastDecodeError = "\(event): parser rejected payload"
+                }
+            }
+        }
     }
 
     func on(_ event: String, handler: @escaping () -> Void) {
