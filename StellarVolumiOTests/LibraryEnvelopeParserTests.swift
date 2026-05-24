@@ -60,4 +60,28 @@ final class LibraryEnvelopeParserTests: XCTestCase {
         XCTAssertEqual(env?.albums.count, 1)
         XCTAssertEqual(env?.albums[0].title, "The Wall")
     }
+
+    func testPushLibraryAlbumsRealBackendShape() {
+        // Pins the 2026-05-24 Phase 1.11 fix-up: backend sends `albumArt`
+        // (camelCase) and a `pagination` envelope instead of `total`. Albums
+        // must populate AND their albumart field must be non-empty.
+        let env = PushLibraryAlbums(rawDict: Fixtures.pushLibraryAlbumsRealBackend)
+        XCTAssertNotNil(env)
+        XCTAssertEqual(env?.albums.count, 2)
+        XCTAssertEqual(env?.albums[0].title, "Time Out")
+        XCTAssertEqual(env?.albums[0].albumart,
+                       "/albumart?path=NAS/Dave%20Brubeck/Time%20Out",
+                       "albumArt camelCase from backend must map onto LibraryAlbum.albumart")
+        XCTAssertEqual(env?.albums[1].albumart,
+                       "/albumart?path=NAS/John%20Coltrane/A%20Love%20Supreme")
+        XCTAssertNil(env?.total, "real backend uses pagination object; top-level total is nil — pinned as known gap, fix TBD")
+    }
+
+    func testLibraryAlbumStillReadsLowercaseAlbumart() {
+        // Backwards compat — older test fixtures (Fixtures.pushLibraryAlbumsCanonical)
+        // use lowercase `albumart`. The fix must not break that fallback.
+        let env = PushLibraryAlbums(rawDict: Fixtures.pushLibraryAlbumsCanonical)
+        XCTAssertEqual(env?.albums[0].albumart,
+                       "/albumart?path=NAS/Pink%20Floyd/Dark%20Side")
+    }
 }

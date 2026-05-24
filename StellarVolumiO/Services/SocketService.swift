@@ -75,7 +75,8 @@ final class SocketService {
 
     // MARK: - Emit
     func emit(_ event: String, data: [Any] = []) {
-        guard isConnected else { return }
+        // Note: emits while disconnected are buffered by SocketIO-Client-Swift
+        // and flushed on reconnect. Do not pre-guard — the library handles it.
         if data.isEmpty {
             socket?.emit(event)
         } else {
@@ -220,7 +221,8 @@ extension SocketService {
     /// Emit a payload with a single dictionary argument (matches the Volumio2-UI
     /// `socketService.emit('event', payload)` shape).
     func emitObject(_ event: String, _ payload: [String: Any]) {
-        guard isConnected else { return }
+        // Note: emits while disconnected are buffered by SocketIO-Client-Swift
+        // and flushed on reconnect. Do not pre-guard — the library handles it.
         socket?.emit(event, payload)
     }
 

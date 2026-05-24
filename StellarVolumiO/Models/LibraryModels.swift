@@ -168,7 +168,7 @@ extension LibraryAlbum {
         let title    = d["title"]    as? String ?? ""
         let artist   = d["artist"]   as? String ?? ""
         let uri      = d["uri"]      as? String ?? ""
-        let albumart = d["albumart"] as? String ?? ""
+        let albumart = (d["albumArt"] as? String) ?? (d["albumart"] as? String) ?? ""
         let year     = d["year"] as? Int
         let trackCount = d["trackCount"] as? Int
         let id = uri.isEmpty ? "\(artist)|\(title)" : uri

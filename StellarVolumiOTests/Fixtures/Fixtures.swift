@@ -99,4 +99,27 @@ enum Fixtures {
     ]
 
     static let pushLastPlayedAlbumNull: Any = NSNull()
+
+    // Real-backend shape captured 2026-05-24 via socket.io probe — camelCase
+    // albumArt, no `total` (it's in `pagination` instead), no `year`. Pins
+    // the Task 1.11 fix that switched LibraryAlbum.init?(rawDict:) to read
+    // albumArt camelCase.
+    static let pushLibraryAlbumsRealBackend: [String: Any] = [
+        "albums": [
+            ["id": "abc123",
+             "title": "Time Out",
+             "artist": "Dave Brubeck Quartet",
+             "uri": "NAS/Dave Brubeck/Time Out",
+             "albumArt": "/albumart?path=NAS/Dave%20Brubeck/Time%20Out",
+             "trackCount": 7,
+             "source": "mpd"],
+            ["id": "def456",
+             "title": "A Love Supreme",
+             "artist": "John Coltrane",
+             "uri": "NAS/John Coltrane/A Love Supreme",
+             "albumArt": "/albumart?path=NAS/John%20Coltrane/A%20Love%20Supreme",
+             "trackCount": 4]
+        ],
+        "pagination": ["total": 72, "limit": 500, "offset": 0]
+    ]
 }
