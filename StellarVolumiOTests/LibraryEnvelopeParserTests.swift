@@ -44,4 +44,20 @@ final class LibraryEnvelopeParserTests: XCTestCase {
         XCTAssertNotNil(envStr)
         XCTAssertEqual(envStr?.albums.count, 0)
     }
+
+    func testPushLibraryArtistsCanonical() {
+        let env = PushLibraryArtists(rawDict: Fixtures.pushLibraryArtistsCanonical)
+        XCTAssertNotNil(env)
+        XCTAssertEqual(env?.artists.count, 2)
+        XCTAssertEqual(env?.artists[0].name, "Pink Floyd")
+        XCTAssertEqual(env?.artists[1].artistImage, "/artistart?name=Miles%20Davis")
+    }
+
+    func testPushLibraryArtistAlbumsCanonical() {
+        let env = PushLibraryArtistAlbums(rawDict: Fixtures.pushLibraryArtistAlbumsCanonical)
+        XCTAssertNotNil(env)
+        XCTAssertEqual(env?.artist, "Pink Floyd")
+        XCTAssertEqual(env?.albums.count, 1)
+        XCTAssertEqual(env?.albums[0].title, "The Wall")
+    }
 }
