@@ -48,6 +48,49 @@ struct PlayerState: Codable, Equatable {
     )
 }
 
+extension PlayerState {
+    /// Tolerant parser for the Stellar backend `pushState` payload. Accepts
+    /// Int-or-numeric-String for numeric fields and null/missing for any
+    /// optional. Unknown `status` falls back to `.stop`. Returns nil only
+    /// when the input is not a dictionary.
+    init?(rawDict d: [String: Any]) {
+        let s = PlayerState.empty
+        self.init(
+            status:       Self.parseStatus(d["status"])    ?? s.status,
+            title:        d["title"]      as? String       ?? s.title,
+            artist:       d["artist"]     as? String       ?? s.artist,
+            album:        d["album"]      as? String       ?? s.album,
+            albumart:     d["albumart"]   as? String       ?? s.albumart,
+            uri:          d["uri"]        as? String       ?? s.uri,
+            service:      d["service"]    as? String       ?? s.service,
+            duration:     Self.parseInt(d["duration"])     ?? s.duration,
+            seek:         Self.parseInt(d["seek"])         ?? s.seek,
+            volume:       Self.parseInt(d["volume"])       ?? s.volume,
+            mute:         d["mute"]       as? Bool         ?? s.mute,
+            shuffle:      d["shuffle"]    as? Bool         ?? s.shuffle,
+            repeat:       d["repeat"]     as? Bool         ?? s.`repeat`,
+            repeatSingle: d["repeatSingle"] as? Bool       ?? s.repeatSingle,
+            trackType:    d["trackType"]  as? String       ?? s.trackType,
+            samplerate:   d["samplerate"] as? String       ?? s.samplerate,
+            bitdepth:     d["bitdepth"]   as? String       ?? s.bitdepth,
+            channels:     Self.parseInt(d["channels"])     ?? s.channels
+        )
+    }
+
+    private static func parseInt(_ any: Any?) -> Int? {
+        if let v = any as? Int { return v }
+        if let v = any as? Double { return Int(v) }
+        if let v = any as? String, let n = Int(v) { return n }
+        if let v = any as? String, let n = Double(v) { return Int(n) }
+        return nil
+    }
+
+    private static func parseStatus(_ any: Any?) -> PlaybackStatus? {
+        guard let s = any as? String else { return nil }
+        return PlaybackStatus(rawValue: s.lowercased())
+    }
+}
+
 enum PlaybackStatus: String, Codable, Equatable {
     case play
     case pause
