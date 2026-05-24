@@ -37,11 +37,17 @@ final class SocketService {
     var isConnected: Bool { connectionState == .connected }
 
     // MARK: - Connect
-    func connect(host: String? = nil, port: Int? = nil) {
-        let h = host ?? serverHost
-        let p = port ?? serverPort
 
-        let url = URL(string: "http://\(h):\(p)")!
+    /// Create the underlying `SocketIOClient` + `SocketManager` (and wire its
+    /// lifecycle handlers) if they don't exist yet. Calling this before
+    /// `connect()` lets stores register `on(...)` subscriptions during
+    /// `bind(to:)` — without this, those calls land on a nil socket and the
+    /// handlers are silently dropped (the optional-chain `socket?.on(...)`
+    /// becomes a no-op).
+    private func ensureInitialised() {
+        guard socket == nil else { return }  // already built at current host:port
+
+        let url = URL(string: "http://\(serverHost):\(serverPort)")!
 
         manager = SocketManager(
             socketURL: url,
@@ -57,8 +63,25 @@ final class SocketService {
         )
 
         socket = manager?.defaultSocket
-
         setupHandlers()
+    }
+
+    func connect(host: String? = nil, port: Int? = nil) {
+        let newHost = host ?? serverHost
+        let newPort = port ?? serverPort
+
+        // If the endpoint changed since the socket was built, tear it down
+        // and rebuild against the new host:port. Existing callers don't pass
+        // host/port, so this path is defensive only.
+        if socket != nil && (newHost != serverHost || newPort != serverPort) {
+            socket?.disconnect()
+            socket = nil
+            manager = nil
+        }
+        serverHost = newHost
+        serverPort = newPort
+
+        ensureInitialised()
         connectionState = .connecting
         socket?.connect()
     }
@@ -75,6 +98,7 @@ final class SocketService {
 
     // MARK: - Emit
     func emit(_ event: String, data: [Any] = []) {
+        ensureInitialised()
         // Note: emits while disconnected are buffered by SocketIO-Client-Swift
         // and flushed on reconnect. Do not pre-guard — the library handles it.
         if data.isEmpty {
@@ -86,6 +110,7 @@ final class SocketService {
 
     // MARK: - Subscribe
     func on<T: Decodable>(_ event: String, handler: @escaping (T) -> Void) {
+        ensureInitialised()
         let wrapper: (Any) -> Void = { [weak self] data in
             guard let arr = data as? [Any], let first = arr.first else { return }
             do {
@@ -109,6 +134,7 @@ final class SocketService {
     /// `[String: Any]` dict (typical Volumio shape). Caller provides a
     /// tolerant parser; on `nil` we populate `lastDecodeError`.
     func onRawDict<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T) -> Void) {
+        ensureInitialised()
         socket?.on(event) { [weak self] data, _ in
             guard let arr = data as? [Any], let first = arr.first else {
                 DispatchQueue.main.async { self?.lastDecodeError = "\(event): empty payload" }
@@ -132,6 +158,7 @@ final class SocketService {
     /// Variant that allows the payload to be `NSNull` (e.g.
     /// pushLastPlayedAlbum on a fresh backend) — passes `nil` to the handler.
     func onRawDictNullable<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T?) -> Void) {
+        ensureInitialised()
         socket?.on(event) { [weak self] data, _ in
             let first = (data as? [Any])?.first
             if first is NSNull || first == nil {
@@ -157,6 +184,7 @@ final class SocketService {
     }
 
     func on(_ event: String, handler: @escaping () -> Void) {
+        ensureInitialised()
         socket?.on(event) { _, _ in
             DispatchQueue.main.async { handler() }
         }
@@ -164,6 +192,7 @@ final class SocketService {
 
     /// Subscribe with raw `[Any]` payload — use when the wire shape isn't a flat Decodable.
     func onRaw(_ event: String, handler: @escaping ([Any]) -> Void) {
+        ensureInitialised()
         socket?.on(event) { data, _ in
             DispatchQueue.main.async { handler(data) }
         }
@@ -221,6 +250,7 @@ extension SocketService {
     /// Emit a payload with a single dictionary argument (matches the Volumio2-UI
     /// `socketService.emit('event', payload)` shape).
     func emitObject(_ event: String, _ payload: [String: Any]) {
+        ensureInitialised()
         // Note: emits while disconnected are buffered by SocketIO-Client-Swift
         // and flushed on reconnect. Do not pre-guard — the library handles it.
         socket?.emit(event, payload)
