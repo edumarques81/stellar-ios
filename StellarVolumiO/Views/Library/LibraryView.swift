@@ -1,40 +1,36 @@
 import SwiftUI
 
-struct LibraryView: View {
-    enum Section: String, CaseIterable, Identifiable {
-        case albums = "Albums"
-        case artists = "Artists"
-        var id: String { rawValue }
-    }
+enum LibrarySegment: String, CaseIterable, Identifiable {
+    case albums = "Albums"
+    case artists = "Artists"
+    var id: Self { self }
+}
 
-    @State private var section: Section = .albums
+struct LibraryView: View {
+    @State private var segment: LibrarySegment = .albums
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Library section", selection: $section) {
-                    ForEach(Section.allCases) { s in
-                        Text(s.rawValue).tag(s)
+        ZStack {
+            StellarGlassyBackground()
+
+            NavigationStack {
+                VStack(spacing: 0) {
+                    Picker("Library segment", selection: $segment) {
+                        ForEach(LibrarySegment.allCases) { s in
+                            Text(s.rawValue).tag(s)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+
+                    switch segment {
+                    case .albums:  AlbumPickerView()
+                    case .artists: ArtistPickerView()
                     }
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-
-                Divider().background(Color.mdOutlineVariant.opacity(0.4))
-
-                switch section {
-                case .albums:
-                    AlbumPickerView()
-                case .artists:
-                    ArtistPickerView()
-                }
             }
-            .background(Color.mdBackground.ignoresSafeArea())
-            .navigationTitle("Library")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.mdBackground, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 }
