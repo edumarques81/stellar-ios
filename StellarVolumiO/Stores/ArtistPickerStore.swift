@@ -17,11 +17,13 @@ final class ArtistPickerStore {
 
     func bind(to socket: SocketService) {
         self.socket = socket
-        socket.on("pushLibraryArtists") { [weak self] (payload: PushLibraryArtists) in
+        socket.onRawDict("pushLibraryArtists",
+                         parser: PushLibraryArtists.init(rawDict:)) { [weak self] (payload: PushLibraryArtists) in
             self?.artists = payload.artists
             self?.loading = false
         }
-        socket.on("pushLibraryArtistAlbums") { [weak self] (payload: PushLibraryArtistAlbums) in
+        socket.onRawDict("pushLibraryArtistAlbums",
+                         parser: PushLibraryArtistAlbums.init(rawDict:)) { [weak self] (payload: PushLibraryArtistAlbums) in
             self?.artistAlbums = payload.albums
             self?.loadingArtistAlbums = false
         }

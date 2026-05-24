@@ -12,7 +12,8 @@ final class AlbumPickerStore {
 
     func bind(to socket: SocketService) {
         self.socket = socket
-        socket.on("pushLibraryAlbums") { [weak self] (payload: PushLibraryAlbums) in
+        socket.onRawDict("pushLibraryAlbums",
+                         parser: PushLibraryAlbums.init(rawDict:)) { [weak self] (payload: PushLibraryAlbums) in
             self?.albums = payload.albums
             self?.loading = false
             self?.lastError = nil
