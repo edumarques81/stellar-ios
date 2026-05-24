@@ -228,3 +228,21 @@ extension SocketService {
     func lcdStandby()  { emit("lcdStandby") }
     func getLcdStatus(){ emit("getLcdStatus") }
 }
+
+// MARK: - Test hooks
+//
+// Production callers of onRawDict / onRawDictNullable / on<T> populate
+// lastDecodeError via the DispatchQueue.main.async paths. These two helpers
+// give tests a synchronous, socket-less entry point with the same shape.
+
+#if DEBUG
+extension SocketService {
+    func simulateDecodeFailure(event: String, reason: String) {
+        lastDecodeError = "\(event): \(reason)"
+    }
+
+    func simulateDecodeSuccess() {
+        lastDecodeError = nil
+    }
+}
+#endif
