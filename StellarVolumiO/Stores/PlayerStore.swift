@@ -9,8 +9,16 @@ final class PlayerStore {
     var queue: [QueueItem] = []
     var currentQueueIndex: Int = 0
 
+    /// Optimistic playback status set on tap. Server `pushState` clears it.
+    /// Times out after 2 s so a missing push doesn't lie to the UI forever.
+    var optimisticStatus: PlaybackStatus? = nil
+    private var optimisticTimeoutTask: Task<Void, Never>? = nil
+
     // Derived
-    var isPlaying: Bool { state.status == .play }
+    var isPlaying: Bool {
+        if let o = optimisticStatus { return o == .play }
+        return state.status == .play
+    }
     var hasTrack: Bool { !state.title.isEmpty }
 
     var currentTrackFormatBadges: [String] {
@@ -23,6 +31,26 @@ final class PlayerStore {
             badges.append("\(state.bitdepth)bit")
         }
         return badges
+    }
+
+    /// Set optimistic state from a UI tap and start the 2 s reconciliation
+    /// timeout. Subsequent server `pushState` will clear the optimistic value.
+    func applyOptimistic(_ status: PlaybackStatus) {
+        optimisticStatus = status
+        optimisticTimeoutTask?.cancel()
+        optimisticTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.optimisticStatus = nil }
+        }
+    }
+
+    /// Apply server-truth state and clear any pending optimistic value.
+    func receiveServerState(_ newState: PlayerState) {
+        state = newState
+        optimisticStatus = nil
+        optimisticTimeoutTask?.cancel()
+        optimisticTimeoutTask = nil
     }
 
     var albumArtURL: URL? {
@@ -45,7 +73,11 @@ final class PlayerStore {
                self.state.volume != newState.volume ||
                abs(self.state.seekSeconds - newState.seekSeconds) > 1.0 ||
                self.state.duration != newState.duration {
-                self.state = newState
+                self.receiveServerState(newState)
+            } else {
+                // Same payload — still clear optimistic so it doesn't hang.
+                self.optimisticStatus = nil
+                self.optimisticTimeoutTask?.cancel()
             }
         }
 
