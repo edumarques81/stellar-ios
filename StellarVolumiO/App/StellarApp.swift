@@ -9,6 +9,13 @@ struct StellarApp: App {
     @State private var lcdStore = LcdStore()
     @State private var lastPlayedStore = LastPlayedStore()
 
+    init() {
+        // Configure the shared URLCache with a large disk-backed store before
+        // any URLSession.shared traffic happens. This is what makes album-art
+        // covers survive across app launches — see AlbumArtCache for details.
+        AlbumArtCache.configureSharedCache()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
