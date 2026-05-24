@@ -49,7 +49,7 @@ private struct AlbumTile: View {
                             endPoint: .bottomTrailing
                         ))
                     if let url = artworkURL {
-                        AsyncImage(url: url) { image in
+                        CachedAsyncImage(url: url) { image in
                             image.resizable().scaledToFill()
                         } placeholder: { EmptyView() }
                     }
