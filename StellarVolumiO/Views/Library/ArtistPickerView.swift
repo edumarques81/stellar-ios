@@ -5,79 +5,38 @@ struct ArtistPickerView: View {
     @Environment(SocketService.self) private var socket
 
     var body: some View {
-        Group {
-            if store.loading && store.artists.isEmpty {
-                ProgressView("Loading artists…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .foregroundStyle(.mdOnSurfaceVariant)
-            } else if store.artists.isEmpty {
-                emptyState
-            } else {
-                artistList
-            }
-        }
-        .onAppear {
-            if store.artists.isEmpty { store.load() }
-        }
-        .navigationDestination(item: Binding(
-            get: { store.selectedArtist },
-            set: { newValue in if newValue == nil { store.clearSelection() } }
-        )) { artist in
-            ArtistDetailView(artist: artist)
-        }
-    }
+        List {
+            ForEach(store.artists) { artist in
+                NavigationLink(value: artist) {
+                    HStack(spacing: 12) {
+                        artistAvatar(for: artist)
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.2")
-                .font(.system(size: 40))
-                .foregroundStyle(.mdOnSurfaceVariant.opacity(0.6))
-            Text("No artists yet")
-                .font(StellarFont.titleMedium)
-                .foregroundStyle(.mdOnSurfaceVariant)
-            Button { store.load() } label: {
-                Text("Reload")
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.bordered)
-            .tint(.mdPrimary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var artistList: some View {
-        List(store.artists) { artist in
-            Button { store.select(artist) } label: {
-                HStack(spacing: 12) {
-                    artistAvatar(for: artist)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(artist.name)
-                            .font(StellarFont.titleSmall)
-                            .foregroundStyle(.mdOnSurface)
-                            .lineLimit(1)
-                        if let count = artist.albumCount, count > 0 {
-                            Text("\(count) album\(count == 1 ? "" : "s")")
-                                .font(StellarFont.bodySmall)
-                                .foregroundStyle(.mdOnSurfaceVariant)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(artist.name)
+                                .font(.system(size: 14, weight: .semibold))
+                                .lineLimit(1)
+                            if let n = artist.albumCount, n > 0 {
+                                Text("\(n) album\(n == 1 ? "" : "s")")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+
+                        Spacer()
                     }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.mdOnSurfaceVariant)
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+                .listRowBackground(Color.mdSurfaceContainerLow)
             }
-            .listRowBackground(Color.mdSurfaceContainerLow)
-            .listRowSeparatorTint(.mdOutlineVariant.opacity(0.3))
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color.mdBackground)
-        .refreshable { store.load() }
+        .navigationDestination(for: LibraryArtist.self) { artist in
+            ArtistDetailView(artist: artist)
+        }
+        .onAppear {
+            if store.artists.isEmpty && !store.loading { store.load() }
+        }
     }
 
     @ViewBuilder
