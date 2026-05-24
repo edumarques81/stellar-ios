@@ -35,15 +35,16 @@ final class PlayerStore {
 
     // MARK: - Bind to socket
     func bind(to socket: SocketService) {
-        socket.on("pushState") { [weak self] (newState: PlayerState) in
+        socket.onRawDict("pushState",
+                         parser: PlayerState.init(rawDict:)) { [weak self] (newState: PlayerState) in
             guard let self else { return }
-            // Only update if meaningful fields changed — avoid re-renders
             if self.state.status != newState.status ||
-               self.state.title != newState.title ||
+               self.state.title  != newState.title  ||
                self.state.artist != newState.artist ||
-               self.state.album != newState.album ||
+               self.state.album  != newState.album  ||
                self.state.volume != newState.volume ||
-               abs(self.state.seekSeconds - newState.seekSeconds) > 1.0 {
+               abs(self.state.seekSeconds - newState.seekSeconds) > 1.0 ||
+               self.state.duration != newState.duration {
                 self.state = newState
             }
         }
