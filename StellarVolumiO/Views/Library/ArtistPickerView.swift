@@ -50,11 +50,7 @@ struct ArtistPickerView: View {
         List(store.artists) { artist in
             Button { store.select(artist) } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.mdOnSurfaceVariant)
-                        .frame(width: 56, height: 56)
-                        .background(Color.mdSurfaceContainerHigh, in: Circle())
+                    artistAvatar(for: artist)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(artist.name)
@@ -82,6 +78,27 @@ struct ArtistPickerView: View {
         .scrollContentBackground(.hidden)
         .background(Color.mdBackground)
         .refreshable { store.load() }
+    }
+
+    @ViewBuilder
+    private func artistAvatar(for artist: LibraryArtist) -> some View {
+        AsyncImage(url: artistImageURL(for: artist)) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(.mdOnSurfaceVariant)
+        }
+        .frame(width: 56, height: 56)
+        .background(Color.mdSurfaceContainerHigh, in: Circle())
+        .clipShape(Circle())
+    }
+
+    private func artistImageURL(for artist: LibraryArtist) -> URL? {
+        guard !artist.name.isEmpty,
+              let encoded = artist.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        else { return nil }
+        return URL(string: "http://\(socket.serverHost):\(socket.serverPort)/artistart?name=\(encoded)")
     }
 }
 
