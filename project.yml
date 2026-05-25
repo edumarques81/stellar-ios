@@ -77,6 +77,11 @@ targets:
         NSLocalNetworkUsageDescription: "Stellar discovers your backend server on this Wi-Fi network so the app can control playback."
         NSBonjourServices:
           - _stellar._tcp
+        # App uses no encryption beyond what's exempt under US export law
+        # (HTTPS via system frameworks is exempt; we don't ship any custom
+        # crypto). Setting this here clears the "Missing Export Compliance"
+        # blocker on every App Store Connect upload.
+        ITSAppUsesNonExemptEncryption: false
     dependencies:
       - package: socket.io-client-swift
         product: SocketIO
