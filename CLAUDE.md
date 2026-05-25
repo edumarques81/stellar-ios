@@ -6,8 +6,8 @@
 This app is a **minimal remote control** for the Stellar backend. It has exactly four user-facing features and nothing else:
 
 1. **Transport** — play / pause / next / previous + volume + seek (Now Playing tab).
-2. **Album picker** — list of all local albums; tap one to play (Library tab → Albums).
-3. **Artist picker** — list of artists, drill into one to see their albums; tap an album to play (Library tab → Artists).
+2. **Album picker → tap → Album Tracks (Play Album CTA + per-track play)** — Library tab → Albums shows a grid of all local albums; tap a tile to push the Album Tracks screen (cover + title + artist + full-width gold "Play Album" CTA + track list). Tap "Play Album" to play the whole folder; tap any track row to start playback at that track.
+3. **Artist picker** — list of artists, drill into one to see their albums; tap an album to push the same Album Tracks screen described above (Library tab → Artists).
 4. **LCD on/off toggle** — single switch in Settings that wakes or standbys the Pi LCD via the backend.
 
 Anything beyond this is explicitly out of scope: no favourites, no playlists, no queue editor, no audio-engine switching, no Qobuz / Tidal / Spotify, no theme picker, no settings dashboard, no search, no mDNS auto-discovery, no lock-screen controls.
@@ -29,10 +29,10 @@ StellarVolumiO/
   App/            StellarApp.swift, ContentView.swift
   Models/         PlayerState.swift, LibraryModels.swift
   Services/       SocketService.swift
-  Stores/         PlayerStore, AlbumPickerStore, ArtistPickerStore, LcdStore
+  Stores/         PlayerStore, AlbumPickerStore, ArtistPickerStore, AlbumTracksStore, LcdStore
   Views/
     NowPlaying/   NowPlayingView.swift          (transport tab)
-    Library/      LibraryView, AlbumPickerView, ArtistPickerView
+    Library/      LibraryView, AlbumPickerView, ArtistPickerView, AlbumTracksView
     Settings/     SettingsView.swift            (LCD toggle only)
   Utils/          DesignTokens.swift, StellarLogoView.swift
 ```
@@ -59,6 +59,7 @@ Aligned with `Volumio2-UI/CLAUDE.md` (frontend) and `stellar-volumio-audioplayer
 | `pushLibraryAlbums`       | `PushLibraryAlbums`        | Populate Album picker |
 | `pushLibraryArtists`      | `PushLibraryArtists`       | Populate Artist picker |
 | `pushLibraryArtistAlbums` | `PushLibraryArtistAlbums`  | Populate artist drill-down |
+| `pushLibraryAlbumTracks`  | `PushLibraryAlbumTracks`   | Populate Album Tracks screen (tracks + totalDuration; `error` field surfaces failure) |
 | `pushLcdStatus`           | `LcdStatus`                | Reconcile LCD toggle |
 
 ### Emit (iOS → backend)
@@ -73,7 +74,8 @@ Aligned with `Volumio2-UI/CLAUDE.md` (frontend) and `stellar-volumio-audioplayer
 | `library:albums:list` | `{scope, sort, limit, offset, query?}` | AlbumPickerStore.load() |
 | `library:artists:list` | `{scope, sort, limit, offset}` | ArtistPickerStore.load() |
 | `library:artist:albums` | `{artist}` | ArtistPickerStore.select() |
-| `replaceAndPlay` | `{service, type, title, artist, albumart, uri}` | Tap an album to play |
+| `library:album:tracks` | `{album, albumArtist?, uri?}` | AlbumTracksStore.load() (drill-in to Album Tracks) |
+| `replaceAndPlay` | `{service, type, title, artist, albumart, uri}` | Play Album CTA (type=folder) + per-track tap (type=song) |
 | `lcdWake`, `lcdStandby` | — | Settings toggle |
 
 ## Build
@@ -91,8 +93,8 @@ The app talks to the Mac stellar backend at `192.168.86.221:3000`. To smoke-test
 1. Confirm Mac stellar is running: `lsof -nP -iTCP:3000 -sTCP:LISTEN`.
 2. Build + launch the app.
 3. In **Now Playing** tab: tap play, the Mac log at `~/Library/Logs/stellar-backend.err.log` should show `Play` / `Next` / `Prev` / `Seek` events.
-4. In **Library → Albums**: list should populate (was 72 albums last sweep). Tap one → playback starts; Pi LCD switches to that album.
-5. In **Library → Artists**: list should populate (was 41 artists). Tap one → drill-down shows that artist's albums. Tap an album → playback starts.
+4. In **Library → Albums**: list should populate (was 72 albums last sweep). Tap one → Album Tracks screen pushes with cover + tracks. Tap "Play Album" → whole album plays + Pi LCD switches. Tap any single track row → that one track plays.
+5. In **Library → Artists**: list should populate (was 41 artists). Tap one → drill-down shows that artist's albums. Tap an album → Album Tracks screen pushes (same as #4).
 6. In **Settings → LCD screen**: toggle off → Pi LCD goes dark within ~1s. Toggle on → LCD wakes.
 
 ## What's intentionally absent
