@@ -169,5 +169,6 @@ fi
 echo ""
 echo "✅ Done."
 echo ""
-echo "Backend the app will hit: 192.168.86.221:3000 (hardcoded in Services/SocketService.swift)."
+echo "Default backend:          192.168.86.221:3000 (Stores/BackendConfigStore.defaultHost)"
+echo "                          Override in-app via Settings → Backend Server."
 echo "Mac stellar log:          ~/Library/Logs/stellar-backend.err.log"
