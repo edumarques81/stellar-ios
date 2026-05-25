@@ -13,13 +13,23 @@ enum ConnectionState: Equatable {
 // MARK: - Socket Service
 // Manages the Socket.IO connection to the Stellar backend.
 //
-// The default host points at the current backend deployment. Edit this one
-// line when the backend host moves (Mac → Win/Linux/Pi).
-private let defaultHost = "192.168.86.221"
-private let defaultPort = 3000
+// The backend host/port/scheme is read from the injected `BackendConfigStore`
+// rather than a code constant. The fallback chain inside the store
+// (custom → discovered → default) preserves the previous out-of-the-box
+// behaviour of connecting to 192.168.86.221:3000.
 
 @Observable
 final class SocketService {
+
+    /// Backend configuration source. Reads host/port/scheme on every
+    /// `ensureInitialised()` so SettingsView edits + Bonjour-driven updates
+    /// flow through transparently. The default value lets existing test
+    /// code keep using `SocketService()` with no parameters.
+    private let config: BackendConfigStore
+
+    init(config: BackendConfigStore = BackendConfigStore()) {
+        self.config = config
+    }
 
     var connectionState: ConnectionState = .disconnected {
         didSet {
@@ -28,16 +38,37 @@ final class SocketService {
             // in-flight grace timer so the UI doesn't later flip red.
             if case .connected = connectionState {
                 clearGraceWindow()
+                lastConnectionError = nil
             }
         }
     }
-    var serverHost: String = defaultHost
-    var serverPort: Int = defaultPort
+
+    /// Host the socket is currently configured against. Updated each time
+    /// `ensureInitialised()` builds a manager.
+    var serverHost: String = BackendConfigStore.defaultHost
+    /// Port the socket is currently configured against. Updated each time
+    /// `ensureInitialised()` builds a manager.
+    var serverPort: Int = BackendConfigStore.defaultPort
+    /// Scheme (http/https) the socket is currently configured against.
+    var serverScheme: String = BackendConfigStore.defaultScheme
+
+    /// Human-readable URL the UI can display (e.g. "Connected to
+    /// http://192.168.86.221:3000"). Always reflects the resolved
+    /// `BackendConfigStore` values.
+    var currentBackendURL: String {
+        "\(serverScheme)://\(serverHost):\(serverPort)"
+    }
 
     /// One-line summary of the last failed decode, e.g. "pushState: dict cast
     /// failed". `nil` when the last incoming payload decoded cleanly.
     /// Surfaced in the Settings → ConnectionStatusRow diagnostic.
     var lastDecodeError: String? = nil
+
+    /// One-line summary of the last connect/transport-level failure. Cleared
+    /// on the next successful `.connected`. Surfaced in the ContentView
+    /// "Can't reach backend" banner alongside the Retry / Server Settings
+    /// buttons.
+    var lastConnectionError: String? = nil
 
     /// UI-facing view of the connection state. During the 5-second
     /// post-disconnect grace, this returns `.connecting` so the UI shows a
@@ -66,10 +97,38 @@ final class SocketService {
     /// `bind(to:)` — without this, those calls land on a nil socket and the
     /// handlers are silently dropped (the optional-chain `socket?.on(...)`
     /// becomes a no-op).
+    ///
+    /// Reads the latest host/port/scheme from `config` and rebuilds the
+    /// underlying SocketManager if the resolved endpoint changed since the
+    /// last initialisation. That's what makes Settings → "Save" trigger an
+    /// automatic reconnect against the new backend.
     private func ensureInitialised() {
-        guard socket == nil else { return }  // already built at current host:port
+        let resolvedHost = config.host
+        let resolvedPort = config.port
+        let resolvedScheme = config.scheme
 
-        let url = URL(string: "http://\(serverHost):\(serverPort)")!
+        let endpointChanged =
+            resolvedHost != serverHost ||
+            resolvedPort != serverPort ||
+            resolvedScheme != serverScheme
+
+        if socket != nil && !endpointChanged { return }
+        if socket != nil && endpointChanged {
+            // Tear down the existing manager so we rebuild against the new
+            // endpoint. Re-bind callers will re-register their `on(...)`
+            // handlers via ensureInitialised() the next time they emit.
+            socket?.disconnect()
+            socket = nil
+            manager = nil
+            eventHandlers.removeAll()
+        }
+        guard socket == nil else { return }
+
+        serverHost = resolvedHost
+        serverPort = resolvedPort
+        serverScheme = resolvedScheme
+
+        let url = URL(string: "\(resolvedScheme)://\(resolvedHost):\(resolvedPort)")!
 
         manager = SocketManager(
             socketURL: url,
@@ -88,23 +147,34 @@ final class SocketService {
         setupHandlers()
     }
 
+    /// Connect to the backend. The optional host/port arguments stay for
+    /// backward compatibility — production callers pass nothing and let the
+    /// injected `BackendConfigStore` drive the endpoint.
     func connect(host: String? = nil, port: Int? = nil) {
-        let newHost = host ?? serverHost
-        let newPort = port ?? serverPort
-
-        // If the endpoint changed since the socket was built, tear it down
-        // and rebuild against the new host:port. Existing callers don't pass
-        // host/port, so this path is defensive only.
-        if socket != nil && (newHost != serverHost || newPort != serverPort) {
-            socket?.disconnect()
-            socket = nil
-            manager = nil
+        // Custom host/port overrides land in the config store, then
+        // ensureInitialised() picks them up uniformly with the discovered +
+        // default fallbacks. This keeps "Save" in Settings and any direct
+        // `connect(host:port:)` test call going through the same path.
+        if let host {
+            try? config.setCustom(host: host, port: port, scheme: nil)
+        } else if let port {
+            try? config.setCustom(host: nil, port: port, scheme: nil)
         }
-        serverHost = newHost
-        serverPort = newPort
-
         ensureInitialised()
         connectionState = .connecting
+        socket?.connect()
+    }
+
+    /// Tear down the existing socket and reconnect against whatever
+    /// `BackendConfigStore` now resolves to. Called by SettingsView after
+    /// the user saves a new host/port or picks a discovered server.
+    func reconnectWithCurrentConfig() {
+        socket?.disconnect()
+        socket = nil
+        manager = nil
+        eventHandlers.removeAll()
+        connectionState = .connecting
+        ensureInitialised()
         socket?.connect()
     }
 
@@ -130,6 +200,13 @@ final class SocketService {
 
         isInGraceWindow = true
         connectionState = .disconnected
+        // Populate the user-facing error string so ContentView's banner
+        // surfaces with a friendly message after the grace window expires.
+        // We don't overwrite a more-specific message already set by the
+        // .error handler.
+        if lastConnectionError == nil {
+            lastConnectionError = "Lost connection to backend"
+        }
         graceTask?.cancel()
         graceTask = Task { @MainActor [weak self] in
             let ns = UInt64(Self.disconnectGraceSeconds * 1_000_000_000)
@@ -275,6 +352,7 @@ final class SocketService {
         socket?.on(clientEvent: .error) { [weak self] data, _ in
             DispatchQueue.main.async {
                 let message = (data.first as? String) ?? "Unknown error"
+                self?.lastConnectionError = message
                 self?.connectionState = .error(message)
             }
         }
