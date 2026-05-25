@@ -311,6 +311,9 @@ extension SocketService {
         // Note: emits while disconnected are buffered by SocketIO-Client-Swift
         // and flushed on reconnect. Do not pre-guard — the library handles it.
         socket?.emit(event, payload)
+        #if DEBUG
+        _recordEmittedObject(event: event, payload: payload)
+        #endif
     }
 
     func lcdWake()     { emit("lcdWake") }
@@ -351,6 +354,29 @@ extension SocketService {
 
     func simulateDecodeSuccess() {
         lastDecodeError = nil
+    }
+}
+
+/// Test-only capture of the last `emitObject(_:_:)` call. Lets stores'
+/// `load(...)` methods be verified for the wire payload they send without
+/// needing a real Socket.IO connection. Production code never reads these.
+extension SocketService {
+    private static var captureStorage: [ObjectIdentifier: (event: String, payload: [String: Any])] = [:]
+
+    var lastEmittedObjectEvent: String? {
+        Self.captureStorage[ObjectIdentifier(self)]?.event
+    }
+
+    var lastEmittedObjectPayload: [String: Any]? {
+        Self.captureStorage[ObjectIdentifier(self)]?.payload
+    }
+
+    func _recordEmittedObject(event: String, payload: [String: Any]) {
+        Self.captureStorage[ObjectIdentifier(self)] = (event: event, payload: payload)
+    }
+
+    func resetEmittedObjectCapture() {
+        Self.captureStorage.removeValue(forKey: ObjectIdentifier(self))
     }
 }
 #endif
