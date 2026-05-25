@@ -2961,3 +2961,70 @@ Surfaced during planning but **not in this plan's scope** — capture in MemPala
 - **Library search.** Out of scope for v1 per design. If a user with a much larger library asks for it, lift the spec's "Albums + Artists + Search" alternative.
 - **Lock-screen / MPRemoteCommandCenter.** Out of scope per CLAUDE.md. Track separately as Plan C from the parked backlog (`project_snug_summit_complete_followups`).
 - **Bonjour / mDNS host discovery.** Out of scope. Host stays a code constant.
+
+---
+
+## Follow-up: phone → Pi audio streaming (AirPlay / UPnP) — enqueued 2026-05-25
+
+**Ask, verbatim:** "I want a way to play music from my phone to the Pi. AirPlay, UPnP, anything that allows that to happen. Can run in parallel in a subagent. Just make it work."
+
+**Out of scope of *this* plan (iOS remote redesign):** this is a Pi system-config task, not an iOS or backend code change. Captured here only so it survives this session.
+
+**Working scope (delegated to a parallel subagent during the Phase 6 session):**
+- Install + configure `shairport-sync` (AirPlay 1) on the Pi via apt, or fall back to upmpdcli/UPnP if shairport-sync proves untenable.
+- Solve audio-device contention with MPD (pause MPD via `mpc` from a shairport-sync `run_this_before_play_begins` hook; do not auto-resume).
+- Verify mDNS discoverability on the LAN (`avahi-browse _raop._tcp` shows a `Stellar` record).
+- Keep MPD healthy.
+- Report back configuration + any user-tap verification still needed.
+
+**Acceptance (final, when user has the phone in hand):**
+- iPhone Control Center → AirPlay → `Stellar` appears in the destination list.
+- Tapping it pipes audio to the Pi speakers within a few seconds.
+- After the AirPlay session ends, MPD can resume from stellar-ios (no auto-resume).
+- Setup survives a Pi reboot (service enabled).
+
+**Status:** dispatched 2026-05-25 in parallel with Phase 6.
+
+---
+
+## Follow-up: album-switch play latency (iPhone tap → Pi audio) — enqueued 2026-05-25
+
+**Ask, verbatim:** "From the iPhone to the music playing into the [Pi]. It takes very long to update. Several seconds. Takes several seconds for the Pi to start playing when I am switching albums."
+
+**Symptom:** Tapping an album in stellar-ios Library → audible playback on Pi speakers lags by "several seconds". Worse than the optimistic UI flicker; the audio path itself is slow.
+
+**Likely path to instrument:**
+1. iOS `replaceAndPlay` Socket.IO emit (timestamp at tap).
+2. Mac stellar backend `socketio` handler (timestamp at receipt).
+3. Mac stellar `internal/domain/player/*` build-and-dispatch (stop/clear/addid/play cycle to MPD).
+4. MPD on Pi (port 6600) parse + queue + start.
+5. MPD ALSA prerolls the file → first audio out the DAC.
+
+**Working scope (delegated to a background investigation subagent during the Phase 6 session):**
+- Reproduce on the simulator with a tight loop (3 album taps, 30s apart).
+- Capture timestamps at each hop using `~/Library/Logs/stellar-backend.{err,out}.log`, `mpc idleloop` / `mpc status` on the Pi, and the Mac stellar Go code path.
+- Identify the dominant cost (network? Mac→Pi MPD round-trip? MPD prebuffer? DAC negotiation between formats?).
+- Propose a fix and/or a minimal repro test. Do NOT ship the fix yet — just diagnose.
+
+**Acceptance (for the investigation, not the fix):**
+- A timing breakdown: e.g. "iOS→Mac: 30ms, Mac→MPD: 80ms, MPD-queue: 200ms, MPD→audio: 3.5s (format negotiation for DSD↔PCM switch)."
+- A 1–3 line root-cause hypothesis with the supporting evidence.
+- A suggested fix scope (single sentence; e.g. "pre-warm MPD with `consume off + crossfade 0`" or "set MPD `audio_buffer_size = 1024` from 4096").
+
+**Status:** investigation dispatched 2026-05-25 in parallel with Phase 6.
+
+---
+
+## Follow-up: Mac stellar LCD remote-proxy env vars not set (UAT 7 regression) — enqueued 2026-05-25
+
+**Surfaced by:** Phase 6.2 UAT — UAT 7 (Settings LCD toggle) failed because Mac stellar logged `lcd: not supported on this platform` for both `lcdStandby` and `lcdWake`. iOS-side UI toggles correctly; backend never reaches the Pi.
+
+**Root cause:** `internal/infra/lcd/lcd_darwin.go:newPlatform()` returns a `RemoteController` ONLY when both `STELLAR_LCD_REMOTE_URL` and `STELLAR_LCD_REMOTE_TOKEN` env vars are set. The currently-running Mac stellar process has neither set, so it falls back to the darwin stub that returns `ErrUnsupported`. The Pi-side `lcd-control.service` (deployed in M1.C, port + token at `/etc/lcd-control/token`) is fully functional — just not being called.
+
+**Fix scope:** ~5 minutes of config, no code changes.
+1. SSH into Pi, read `/etc/lcd-control/token` and confirm the service port (M1.C install script default).
+2. Add `STELLAR_LCD_REMOTE_URL=http://stellar.local:<port>` and `STELLAR_LCD_REMOTE_TOKEN=<token>` to the Mac stellar launchd plist (or whatever wraps `bin/stellar-darwin` at boot — see Mac stellar deploy notes).
+3. `launchctl unload` + `launchctl load`, or kill + relaunch.
+4. Re-test UAT 7.
+
+**Status:** known regression, NOT blocking Phase 6 ship (per plan's "follow-up, do not block merge" policy for non-core-happy-path UAT items).
