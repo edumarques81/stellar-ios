@@ -45,9 +45,24 @@ final class BackendDiscoveryService {
     /// Settings UI for a "Scanning…" affordance.
     @MainActor var isBrowsing: Bool = false
 
+    /// Absolute deadline at which the auto-stop timer will fire and tear the
+    /// browser down. `nil` whenever the service is not actively browsing.
+    /// Read-only externally; tests / a diagnostic UI may sample this to show
+    /// "auto-stops in N:NN" countdown copy.
+    @MainActor private(set) var discoveryDeadline: Date?
+
     // MARK: - Configuration
 
     static let serviceType = "_stellar._tcp"
+
+    /// Hard cap on how long `NWBrowser` may stay running without an explicit
+    /// extension. Tunable here rather than scattered through callers. Default
+    /// 1 minute keeps the local-network permission ping + battery cost
+    /// bounded — the user only needs scanning active long enough to see and
+    /// tap their backend in the Discover sheet, and re-opening the sheet
+    /// re-arms the timer.
+    static let maxDiscoveryDuration: TimeInterval = 60
+
     private let browserQueue = DispatchQueue(label: "fit.stellar.discovery", qos: .userInitiated)
 
     /// How long an add/remove must persist before we publish it. Guards
@@ -55,8 +70,17 @@ final class BackendDiscoveryService {
     /// when the underlying mDNS record is renewed.
     private let debounceWindow: TimeInterval
 
-    init(debounceWindow: TimeInterval = 0.75) {
+    /// Override for the auto-stop window. Production callers leave it at the
+    /// `maxDiscoveryDuration` default; tests pass a much smaller value so
+    /// the timer fires inside the test runtime budget.
+    private let autoStopAfter: TimeInterval
+
+    init(
+        debounceWindow: TimeInterval = 0.75,
+        autoStopAfter: TimeInterval = BackendDiscoveryService.maxDiscoveryDuration
+    ) {
         self.debounceWindow = debounceWindow
+        self.autoStopAfter = autoStopAfter
     }
 
     deinit {
@@ -80,16 +104,25 @@ final class BackendDiscoveryService {
     /// callback for a service that has since been removed can be cancelled.
     private var resolvers: [String: NWConnection] = [:]
 
+    /// Auto-stop timer. Lives on the main actor; cancelled + replaced on every
+    /// `startDiscovery()` so re-triggers reset the deadline rather than
+    /// stacking multiple expirations.
+    @MainActor private var autoStopTask: Task<Void, Never>?
+
     // MARK: - Browser lifecycle
 
     /// Start scanning for `_stellar._tcp` services on the local network. Safe
-    /// to call multiple times — subsequent calls after a successful start are
-    /// no-ops.
+    /// to call multiple times — repeat calls reset the 1-minute auto-stop
+    /// deadline (so re-opening the Discover sheet keeps NWBrowser alive for
+    /// another full window).
     @MainActor
     func startDiscovery() {
         // Optimistic flag flip on the main actor so the UI's "Scanning…"
         // affordance reacts immediately, even before the browser opens.
         isBrowsing = true
+        // Reset the auto-stop deadline. Always cancel-then-arm so the
+        // contract is "deadline = now + autoStopAfter, never stacked."
+        armAutoStopTimer()
         browserQueue.async { [weak self] in
             self?._startOnQueue()
         }
@@ -100,9 +133,44 @@ final class BackendDiscoveryService {
     @MainActor
     func stopDiscovery() {
         isBrowsing = false
+        cancelAutoStopTimer()
         browserQueue.async { [weak self] in
             self?._stopOnQueue()
         }
+    }
+
+    // MARK: - Auto-stop
+
+    /// Cancel any in-flight auto-stop timer and arm a fresh one. Called from
+    /// `startDiscovery()` on every invocation — the deadline always reflects
+    /// "the most recent start, plus the configured window."
+    @MainActor
+    private func armAutoStopTimer() {
+        autoStopTask?.cancel()
+        let deadline = Date().addingTimeInterval(autoStopAfter)
+        discoveryDeadline = deadline
+        let nanos = UInt64(max(0, autoStopAfter) * 1_000_000_000)
+        autoStopTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: nanos)
+            // Re-check cancellation after the sleep — a manual stopDiscovery()
+            // or a competing armAutoStopTimer() will have flipped this Task
+            // into the cancelled state.
+            guard let self, !Task.isCancelled else { return }
+            // Idempotent stop — `stopDiscovery()` clears both the timer and
+            // the deadline, so a no-op call here is harmless if the user
+            // has already torn things down.
+            self.stopDiscovery()
+        }
+    }
+
+    /// Clear the deadline + cancel any pending auto-stop fire. Called both
+    /// from manual `stopDiscovery()` and (transitively) when the auto-stop
+    /// task fires its own `stopDiscovery()`.
+    @MainActor
+    private func cancelAutoStopTimer() {
+        autoStopTask?.cancel()
+        autoStopTask = nil
+        discoveryDeadline = nil
     }
 
     private func _startOnQueue() {
