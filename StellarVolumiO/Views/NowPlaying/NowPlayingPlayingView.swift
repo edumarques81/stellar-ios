@@ -70,22 +70,26 @@ private struct AlbumArtHero: View {
     let url: URL?
 
     var body: some View {
-        ZStack {
-            placeholder
-            if let url {
-                CachedAsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    EmptyView()
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                ZStack {
+                    placeholder
+                    if let url {
+                        CachedAsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            EmptyView()
+                        }
+                    }
                 }
             }
-        }
-        .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
-        .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
-                radius: Stellar.Shadow.albumArt.radius,
-                y: Stellar.Shadow.albumArt.y)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
+            .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
+                    radius: Stellar.Shadow.albumArt.radius,
+                    y: Stellar.Shadow.albumArt.y)
     }
 
     private var placeholder: some View {
