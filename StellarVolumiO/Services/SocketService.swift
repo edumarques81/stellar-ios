@@ -316,6 +316,25 @@ extension SocketService {
     func lcdWake()     { emit("lcdWake") }
     func lcdStandby()  { emit("lcdStandby") }
     func getLcdStatus(){ emit("getLcdStatus") }
+
+    /// Request the track list for a specific album. `album` is required;
+    /// `albumArtist` and `uri` are optional but recommended — `uri` scopes to a
+    /// specific folder when the same album exists in multiple quality versions.
+    /// Backend reply event: `pushLibraryAlbumTracks` (see onLibraryAlbumTracks).
+    func emitGetAlbumTracks(album: String, albumArtist: String?, uri: String?) {
+        var payload: [String: Any] = ["album": album]
+        if let albumArtist, !albumArtist.isEmpty { payload["albumArtist"] = albumArtist }
+        if let uri, !uri.isEmpty { payload["uri"] = uri }
+        emitObject("library:album:tracks", payload)
+    }
+
+    /// Subscribe to `pushLibraryAlbumTracks` payloads. Uses the tolerant
+    /// rawDict parser so a missing optional field doesn't drop the whole envelope.
+    func onLibraryAlbumTracks(_ handler: @escaping (PushLibraryAlbumTracks) -> Void) {
+        onRawDict("pushLibraryAlbumTracks",
+                  parser: PushLibraryAlbumTracks.init(rawDict:),
+                  handler: handler)
+    }
 }
 
 // MARK: - Test hooks
