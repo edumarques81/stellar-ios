@@ -13,6 +13,13 @@ struct AlbumTracksView: View {
     @Environment(SocketService.self) private var socket
     @Environment(PlayerStore.self) private var player
 
+    // Defensive debounce across BOTH tap surfaces on this screen (Play Album
+    // CTA + per-track rows). Drops any second tap that lands inside the 500 ms
+    // window. The window is short enough to be imperceptible — silent reject
+    // is correct; no spinner/disabled state. See TapDebouncer.swift for why
+    // this isn't a DispatchQueue.asyncAfter trailing-edge timer.
+    @State private var debouncer = TapDebouncer(interval: 0.5)
+
     var body: some View {
         ZStack {
             StellarGlassyBackground()
@@ -77,6 +84,7 @@ struct AlbumTracksView: View {
 
     private func playWholeAlbum() {
         guard !album.uri.isEmpty else { return }
+        guard debouncer.attempt(at: .now) else { return }
         player.applyOptimistic(.play)
         socket.emitObject("replaceAndPlay", [
             "service": "mpd",
@@ -90,6 +98,7 @@ struct AlbumTracksView: View {
 
     private func playTrack(_ track: Track) {
         guard !track.uri.isEmpty else { return }
+        guard debouncer.attempt(at: .now) else { return }
         player.applyOptimistic(.play)
         socket.emitObject("replaceAndPlay", [
             "service": "mpd",
