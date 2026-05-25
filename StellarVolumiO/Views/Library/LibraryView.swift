@@ -30,6 +30,12 @@ struct LibraryView: View {
                     case .artists: ArtistPickerView()
                     }
                 }
+                // Single LibraryAlbum destination shared by both segments —
+                // Albums grid taps push directly, Artists drill-down taps
+                // push via ArtistDetailView's NavigationLink(value: album).
+                .navigationDestination(for: LibraryAlbum.self) { album in
+                    AlbumTracksView(album: album)
+                }
             }
         }
     }

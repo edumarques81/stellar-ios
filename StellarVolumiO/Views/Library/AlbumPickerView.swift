@@ -12,7 +12,12 @@ struct AlbumPickerView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(store.albums) { album in
-                    AlbumTile(album: album) { store.play(album) }
+                    // Push the new Album Tracks screen; the outer
+                    // LibraryView NavigationStack declares the destination.
+                    NavigationLink(value: album) {
+                        AlbumTile(album: album)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 12)
@@ -27,44 +32,40 @@ struct AlbumPickerView: View {
 
 private struct AlbumTile: View {
     let album: LibraryAlbum
-    let onTap: () -> Void
 
     @Environment(SocketService.self) private var socket
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 6) {
-                ZStack {
-                    Rectangle()
-                        .fill(LinearGradient(
-                            colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
-                                     SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                    if let url = artworkURL {
-                        CachedAsyncImage(url: url) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            EmptyView()
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
+                                 SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                if let url = artworkURL {
+                    CachedAsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        EmptyView()
                     }
                 }
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Text(album.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-
-                Text(album.artist)
-                    .font(.system(size: 10))
-                    .lineLimit(1)
-                    .foregroundStyle(.secondary)
             }
+            .aspectRatio(1, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            Text(album.title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+
+            Text(album.artist)
+                .font(.system(size: 10))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
     }
 
     private var artworkURL: URL? {
