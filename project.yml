@@ -71,6 +71,12 @@ targets:
         # globally.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: YES
+        # iOS 14+ requires explicit permission before scanning the local
+        # network. Used by BackendDiscoveryService to find Stellar backends
+        # advertising `_stellar._tcp` via Bonjour.
+        NSLocalNetworkUsageDescription: "Stellar discovers your backend server on this Wi-Fi network so the app can control playback."
+        NSBonjourServices:
+          - _stellar._tcp
     dependencies:
       - package: socket.io-client-swift
         product: SocketIO

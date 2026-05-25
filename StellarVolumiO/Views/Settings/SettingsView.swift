@@ -1,34 +1,65 @@
 import SwiftUI
 
-/// Settings tab — Phase 5.4 redesign.
+/// Settings tab.
 ///
-/// Vertical stack of three rows on the StellarGlassyBackground:
+/// Vertical stack on the StellarGlassyBackground:
 ///   1. LCD on/off toggle (custom Button-based row, see iOS 18 note below).
 ///   2. ConnectionStatusRow — socket connection state + host:port.
 ///   3. DecodeErrorRow — surfaces the last socket decode error (hidden in
 ///      steady state).
+///   4. **Backend Server section** — current backend, "Discover on Wi-Fi",
+///      and a collapsible manual host/port entry. Anchored under
+///      `BackendServerSection.scrollAnchor` so the ContentView
+///      connection-failure banner's "Server Settings" button can scroll to
+///      it.
 ///
-/// The screen scope stays the same as before: this is the only Settings UI
-/// the app exposes. See CLAUDE.md "Scope".
+/// `focusBackendOnAppear` is set to `true` by ContentView when the user taps
+/// "Server Settings" in the failure banner; SettingsView then scrolls to the
+/// Backend Server anchor and clears the binding.
 struct SettingsView: View {
     @Environment(LcdStore.self) private var lcd
+    @Binding var focusBackendOnAppear: Bool
+
+    init(focusBackendOnAppear: Binding<Bool> = .constant(false)) {
+        self._focusBackendOnAppear = focusBackendOnAppear
+    }
 
     var body: some View {
         ZStack {
             StellarGlassyBackground()
 
-            ScrollView {
-                VStack(spacing: 12) {
-                    lcdToggleRow
-                    ConnectionStatusRow()
-                    DecodeErrorRow()
-                    Spacer(minLength: 0)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 12) {
+                        lcdToggleRow
+                        ConnectionStatusRow()
+                        DecodeErrorRow()
+                        BackendServerSection()
+                            .padding(.top, 8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+                .scrollIndicators(.hidden)
+                .onChange(of: focusBackendOnAppear) { _, shouldFocus in
+                    guard shouldFocus else { return }
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(BackendServerSection.scrollAnchor, anchor: .top)
+                    }
+                    // One-shot: clear the binding so a later tap re-arms it.
+                    Task { @MainActor in
+                        focusBackendOnAppear = false
+                    }
+                }
+                .onAppear {
+                    if focusBackendOnAppear {
+                        proxy.scrollTo(BackendServerSection.scrollAnchor, anchor: .top)
+                        Task { @MainActor in focusBackendOnAppear = false }
+                    }
+                }
             }
-            .scrollIndicators(.hidden)
         }
         // Load-bearing: forces a fresh `getLcdStatus` emit whenever the
         // Settings tab appears, so the toggle reconciles against the Pi
