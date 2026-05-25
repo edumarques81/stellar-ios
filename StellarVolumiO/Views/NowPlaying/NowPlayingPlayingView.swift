@@ -70,15 +70,14 @@ private struct AlbumArtHero: View {
     let url: URL?
 
     var body: some View {
-        Group {
+        ZStack {
+            placeholder
             if let url {
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    placeholder
+                    EmptyView()
                 }
-            } else {
-                placeholder
             }
         }
         .aspectRatio(1, contentMode: .fit)
