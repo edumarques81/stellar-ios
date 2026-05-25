@@ -3,14 +3,15 @@
 
 ## Scope
 
-This app is a **minimal remote control** for the Stellar backend. It has exactly four user-facing features and nothing else:
+This app is a **minimal remote control** for the Stellar backend. It has exactly five user-facing features and nothing else:
 
 1. **Transport** — play / pause / next / previous + volume + seek (Now Playing tab).
 2. **Album picker → tap → Album Tracks (Play Album CTA + per-track play)** — Library tab → Albums shows a grid of all local albums; tap a tile to push the Album Tracks screen (cover + title + artist + full-width gold "Play Album" CTA + track list). Tap "Play Album" to play the whole folder; tap any track row to start playback at that track.
 3. **Artist picker** — list of artists, drill into one to see their albums; tap an album to push the same Album Tracks screen described above (Library tab → Artists).
 4. **LCD on/off toggle** — single switch in Settings that wakes or standbys the Pi LCD via the backend.
+5. **Backend server selection** — auto-discover via Bonjour (`_stellar._tcp`) or enter host/port manually (Settings tab → "Backend Server" section).
 
-Anything beyond this is explicitly out of scope: no favourites, no playlists, no queue editor, no audio-engine switching, no Qobuz / Tidal / Spotify, no theme picker, no settings dashboard, no search, no mDNS auto-discovery, no lock-screen controls.
+Anything beyond this is explicitly out of scope: no favourites, no playlists, no queue editor, no audio-engine switching, no Qobuz / Tidal / Spotify, no theme picker, no settings dashboard, no search, no lock-screen controls.
 
 If a feature request lands here that doesn't fit the four above, push back.
 
@@ -20,20 +21,23 @@ If a feature request lands here that doesn't fit the four above, push back.
 - **Target:** iOS 17+
 - **State:** `@Observable` (Observation framework — NOT `@StateObject` / `ObservableObject`)
 - **Transport:** SocketIO-Client-Swift v16, Socket.IO v3 / EIO3 (matches the backend).
-- **Backend host:** hardcoded constant `defaultHost` at the top of `Services/SocketService.swift`. Currently `192.168.86.221:3000` (the Mac that hosts stellar-backend post-M1.C). Edit that one line when the backend moves.
+- **Backend host:** resolved at runtime by `Stores/BackendConfigStore.swift` from a three-tier fallback chain — custom (Settings → Manual entry) → discovered (`Services/BackendDiscoveryService.swift` + Bonjour `_stellar._tcp`) → default `192.168.86.221:3000`. `SocketService` consumes the store via init injection and rebuilds the SocketManager whenever the resolved endpoint changes. The previous hardcoded constant is gone — change the default by editing `BackendConfigStore.defaultHost` (only needed when the bundled fallback ever moves).
 
 ## File Structure
 
 ```
 StellarVolumiO/
-  App/            StellarApp.swift, ContentView.swift
+  App/            StellarApp.swift, ContentView.swift (incl. connection-failure banner)
   Models/         PlayerState.swift, LibraryModels.swift
-  Services/       SocketService.swift
-  Stores/         PlayerStore, AlbumPickerStore, ArtistPickerStore, AlbumTracksStore, LcdStore
+  Services/       SocketService.swift, BackendDiscoveryService.swift
+  Stores/         PlayerStore, AlbumPickerStore, ArtistPickerStore, AlbumTracksStore, LcdStore,
+                  LastPlayedStore, BackendConfigStore
   Views/
     NowPlaying/   NowPlayingView.swift          (transport tab)
     Library/      LibraryView, AlbumPickerView, ArtistPickerView, AlbumTracksView
-    Settings/     SettingsView.swift            (LCD toggle only)
+    Settings/     SettingsView.swift            (LCD toggle + Backend Server section),
+                  BackendServerSection.swift, BackendDiscoverySheet.swift,
+                  ConnectionStatusRow.swift, DecodeErrorRow.swift
   Utils/          DesignTokens.swift, StellarLogoView.swift
 ```
 
@@ -49,6 +53,8 @@ StellarVolumiO/
 ## Socket Event Contract
 
 Aligned with `Volumio2-UI/CLAUDE.md` (frontend) and `stellar-volumio-audioplayer-backend/internal/transport/socketio/`.
+
+> **Host/port note:** The socket URL no longer comes from a code constant. `SocketService.ensureInitialised()` reads `host` / `port` / `scheme` from the injected `BackendConfigStore` on every call, so any change in the store (Settings → Save, Bonjour discovery accepted, etc.) tears down the underlying manager and rebuilds it against the new endpoint.
 
 ### Listen for (backend → iOS)
 
@@ -104,6 +110,5 @@ The app talks to the Mac stellar backend at `192.168.86.221:3000`. To smoke-test
 - No theme picker (the colour system has a fixed "rose" palette by default; you can change it by writing `UserDefaults.standard.set("darkForest", forKey: "colorTheme")` in code, but there is no UI for it).
 - No queue editor.
 - No favourites.
-- No host config UI — host is a code constant. This is deliberate.
 
 If any of these come back, they'd need a new spec discussion first.
