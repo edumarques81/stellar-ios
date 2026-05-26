@@ -3,17 +3,18 @@
 
 ## Scope
 
-This app is a **minimal remote control** for the Stellar backend. It has exactly five user-facing features and nothing else:
+This app is a **minimal remote control** for the Stellar backend. It has exactly six user-facing features and nothing else:
 
 1. **Transport** — play / pause / next / previous + volume + seek (Now Playing tab).
 2. **Album picker → tap → Album Tracks (Play Album CTA + per-track play)** — Library tab → Albums shows a grid of all local albums; tap a tile to push the Album Tracks screen (cover + title + artist + full-width gold "Play Album" CTA + track list). Tap "Play Album" to play the whole folder; tap any track row to start playback at that track.
 3. **Artist picker** — list of artists, drill into one to see their albums; tap an album to push the same Album Tracks screen described above (Library tab → Artists).
 4. **LCD on/off toggle** — single switch in Settings that wakes or standbys the Pi LCD via the backend.
 5. **Backend server selection** — auto-discover via Bonjour (`_stellar._tcp`) or enter host/port manually (Settings tab → "Backend Server" section).
+6. **AirPlay source mode** — when the Pi's `shairport-sync` receiver is mid-session (iPhone streaming via AirPlay), the Now Playing tab swaps to display the AirPlay session info (title / artist / album / cover / sender device) with a gold "AIRPLAY · <sender>" badge. Transport buttons proxy DACP play / pause / next / prev to the iPhone via the backend; seek and the format strip are suppressed (DACP doesn't expose seek; AirPlay 1 is fixed 44.1kHz/16-bit). The branch is driven by `pushAirplayState` / `pushAirplayEnded` events on the same Socket.IO channel — no MPD fields are involved.
 
 Anything beyond this is explicitly out of scope: no favourites, no playlists, no queue editor, no audio-engine switching, no Qobuz / Tidal / Spotify, no theme picker, no settings dashboard, no search, no lock-screen controls.
 
-If a feature request lands here that doesn't fit the four above, push back.
+If a feature request lands here that doesn't fit the six above, push back.
 
 ## Architecture
 
@@ -28,12 +29,14 @@ If a feature request lands here that doesn't fit the four above, push back.
 ```
 StellarVolumiO/
   App/            StellarApp.swift, ContentView.swift (incl. connection-failure banner)
-  Models/         PlayerState.swift, LibraryModels.swift
+  Models/         PlayerState.swift, LibraryModels.swift, AirplayState.swift
   Services/       SocketService.swift, BackendDiscoveryService.swift
-  Stores/         PlayerStore, AlbumPickerStore, ArtistPickerStore, AlbumTracksStore, LcdStore,
-                  LastPlayedStore, BackendConfigStore
+  Stores/         PlayerStore, AirplayStore, AlbumPickerStore, ArtistPickerStore, AlbumTracksStore,
+                  LcdStore, LastPlayedStore, BackendConfigStore
   Views/
-    NowPlaying/   NowPlayingView.swift          (transport tab)
+    NowPlaying/   NowPlayingView.swift          (transport tab, MPD + AirPlay branches),
+                  NowPlayingPlayingView.swift   (source-neutral renderer over NowPlayingDisplayState),
+                  AirplaySourceBadge.swift      (gold "AIRPLAY · <sender>" pill)
     Library/      LibraryView, AlbumPickerView, ArtistPickerView, AlbumTracksView
     Settings/     SettingsView.swift            (LCD toggle + Backend Server section),
                   BackendServerSection.swift, BackendDiscoverySheet.swift,
@@ -60,13 +63,15 @@ Aligned with `Volumio2-UI/CLAUDE.md` (frontend) and `stellar-volumio-audioplayer
 
 | Event | Payload | Why iOS cares |
 |---|---|---|
-| `pushState`               | `PlayerState`              | Update Now Playing UI |
+| `pushState`               | `PlayerState`              | Update Now Playing UI (MPD source) |
 | `pushQueue`               | `[QueueItem]`              | (consumed by PlayerStore for queue position) |
 | `pushLibraryAlbums`       | `PushLibraryAlbums`        | Populate Album picker |
 | `pushLibraryArtists`      | `PushLibraryArtists`       | Populate Artist picker |
 | `pushLibraryArtistAlbums` | `PushLibraryArtistAlbums`  | Populate artist drill-down |
 | `pushLibraryAlbumTracks`  | `PushLibraryAlbumTracks`   | Populate Album Tracks screen (tracks + totalDuration; `error` field surfaces failure) |
 | `pushLcdStatus`           | `LcdStatus`                | Reconcile LCD toggle |
+| `pushAirplayState`        | `AirplayState`             | Swap Now Playing to AirPlay-source UI; carries title/artist/album/sender/coverDataURL/seek/duration/canControl/sessionID |
+| `pushAirplayEnded`        | `AirplayEnded`             | Clear AirPlay UI (only if sessionID matches the currently displayed session — guards against stale ends wiping fresh sessions) |
 
 ### Emit (iOS → backend)
 
