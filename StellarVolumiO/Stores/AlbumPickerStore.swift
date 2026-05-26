@@ -24,6 +24,22 @@ final class AlbumPickerStore {
             self?.lastError = nil
             self?.updateFingerprintAndInvalidateIfChanged()
         }
+        // Backend broadcasts `library:cache:updated` to all clients when a
+        // cache rebuild finishes (e.g. NAS came back online, user pressed
+        // Refresh in the LCD UI). Without this listener, iOS would show
+        // stale data until the user re-entered the Albums tab.
+        socket.on("library:cache:updated") { [weak self] in
+            self?.handleLibraryCacheUpdated()
+        }
+    }
+
+    /// Refetch the album list if the user has visited Albums in this session.
+    /// Empty `albums` means the next `.onAppear` will load fresh data on its
+    /// own, so an extra refetch now would be wasted work. Public so the
+    /// listener in `bind(to:)` and unit tests can invoke it directly.
+    func handleLibraryCacheUpdated() {
+        guard !albums.isEmpty else { return }
+        load()
     }
 
     func load(scope: String = "all", sort: String = "alphabetical", query: String = "") {

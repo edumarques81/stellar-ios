@@ -27,6 +27,27 @@ final class ArtistPickerStore {
             self?.artistAlbums = payload.albums
             self?.loadingArtistAlbums = false
         }
+        // See AlbumPickerStore for the rationale on this listener.
+        socket.on("library:cache:updated") { [weak self] in
+            self?.handleLibraryCacheUpdated()
+        }
+    }
+
+    /// Refetch whatever the user is currently looking at. Always emits the
+    /// artist-list refresh if the user has visited Artists at least once;
+    /// additionally re-pulls the drilled-in artist's album list when one is
+    /// selected (the most-foreground view). Empty store → no-op; the next
+    /// `.onAppear` handles fresh load.
+    func handleLibraryCacheUpdated() {
+        if !artists.isEmpty {
+            load()
+        }
+        if let selectedArtist {
+            // Re-emit the drill-in without resetting `selectedArtist` so the
+            // view stays on the same artist's screen across the refresh.
+            loadingArtistAlbums = true
+            socket?.emitObject("library:artist:albums", ["artist": selectedArtist.name])
+        }
     }
 
     func load(scope: String = "all", sort: String = "alphabetical") {

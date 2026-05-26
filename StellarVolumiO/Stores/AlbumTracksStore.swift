@@ -26,12 +26,22 @@ final class AlbumTracksStore {
     var currentAlbum: String = ""
     var currentAlbumArtist: String = ""
 
+    /// Remembered URI from the last load, used by `handleLibraryCacheUpdated()`
+    /// to replay the same folder-scoped request after a cache rebuild.
+    /// Kept private — views observe `currentAlbum`/`currentAlbumArtist` for
+    /// disambiguation but never need the URI directly.
+    private var currentURI: String = ""
+
     private weak var socket: SocketService?
 
     func bind(to socket: SocketService) {
         self.socket = socket
         socket.onLibraryAlbumTracks { [weak self] payload in
             self?.apply(payload)
+        }
+        // See AlbumPickerStore for the rationale on this listener.
+        socket.on("library:cache:updated") { [weak self] in
+            self?.handleLibraryCacheUpdated()
         }
     }
 
@@ -43,9 +53,20 @@ final class AlbumTracksStore {
         guard let socket else { return }
         currentAlbum       = album
         currentAlbumArtist = albumArtist ?? ""
+        currentURI         = uri ?? ""
         loading       = true
         errorMessage  = nil
         socket.emitGetAlbumTracks(album: album, albumArtist: albumArtist, uri: uri)
+    }
+
+    /// Refetch the currently-displayed album after a backend cache rebuild.
+    /// No-op when nothing has been loaded (empty `currentAlbum`) — the
+    /// AlbumTracks view's `.onAppear` will issue a fresh load when needed.
+    func handleLibraryCacheUpdated() {
+        guard !currentAlbum.isEmpty else { return }
+        let artist = currentAlbumArtist.isEmpty ? nil : currentAlbumArtist
+        let uri    = currentURI.isEmpty ? nil : currentURI
+        load(album: currentAlbum, albumArtist: artist, uri: uri)
     }
 
     /// Apply a `pushLibraryAlbumTracks` payload. Public so tests can drive
