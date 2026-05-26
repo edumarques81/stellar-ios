@@ -418,6 +418,47 @@ extension SocketService {
     }
 }
 
+// MARK: - AirPlay event surface
+//
+// Listen for the AirPlay session events emitted by the Mac backend when the
+// Pi `shairport-sync` receiver is mid-stream. The wire shape is locked across
+// iOS / Volumio2-UI / backend — see `Models/AirplayState.swift` for the
+// canonical payload contract.
+//
+// Emit side: `airplay:command {cmd}` is the only outbound event. The backend
+// resolves the iPhone's DACP host:port via Bonjour and proxies the play /
+// pause / next / prev command back to the AirPlay sender.
+extension SocketService {
+
+    /// Subscribe to `pushAirplayState`. Uses the tolerant rawDict parser so a
+    /// missing optional field doesn't drop the whole envelope.
+    func onPushAirplayState(_ handler: @escaping (AirplayState) -> Void) {
+        onRawDict("pushAirplayState",
+                  parser: AirplayState.init(rawDict:),
+                  handler: handler)
+    }
+
+    /// Subscribe to `pushAirplayEnded`. Sent when the AirPlay session ends
+    /// (sender disconnects, heartbeat times out, etc.). Payload carries the
+    /// terminating sessionID so a stale end can't clear a fresh session.
+    func onPushAirplayEnded(_ handler: @escaping (AirplayEnded) -> Void) {
+        onRawDict("pushAirplayEnded",
+                  parser: AirplayEnded.init(rawDict:),
+                  handler: handler)
+    }
+
+    /// Emit `airplay:command {cmd: "play"|"pause"|"toggle"|"next"|"prev"}`.
+    /// Wraps the single-dictionary emit shape used elsewhere (see
+    /// `emitObject`). The backend acks with `{ok: bool, error?: string}` —
+    /// callers that want the ack should use the explicit `emitWithAck`
+    /// helper rather than these convenience wrappers.
+    func airplayPlay()       { emitObject("airplay:command", ["cmd": "play"]) }
+    func airplayPause()      { emitObject("airplay:command", ["cmd": "pause"]) }
+    func airplayPlayPause()  { emitObject("airplay:command", ["cmd": "toggle"]) }
+    func airplayNext()       { emitObject("airplay:command", ["cmd": "next"]) }
+    func airplayPrev()       { emitObject("airplay:command", ["cmd": "prev"]) }
+}
+
 // MARK: - Test hooks
 //
 // Production callers of onRawDict / onRawDictNullable / on<T> populate
