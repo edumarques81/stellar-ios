@@ -10,7 +10,8 @@ import Foundation
 //
 // Wire shape (locked, matches the backend + Volumio2-UI implementations):
 //   {
-//     "isActive":        Bool,
+//     "isActive":        Bool,      // session alive (true while shairport stream up)
+//     "isPlaying":       Bool,      // currently playing vs. paused (iPhone-side state)
 //     "title":           String,
 //     "artist":          String,
 //     "album":           String,
@@ -23,9 +24,15 @@ import Foundation
 //     "sampleRate":      Int,       // 44100 / 48000 / ...
 //     "bitDepth":        Int        // 16 / 24 / ...
 //   }
+//
+// `isActive` vs `isPlaying`: the iPhone owns AirPlay play/pause. The session
+// can be alive (`isActive=true`) while paused (`isPlaying=false`) — e.g. the
+// user paused Apple Music mid-track. Without `isPlaying`, the play/pause
+// glyph couldn't tell the difference and would lie to the user.
 
 struct AirplayState: Codable, Equatable {
     var isActive: Bool
+    var isPlaying: Bool
     var title: String
     var artist: String
     var album: String
@@ -46,6 +53,11 @@ struct AirplayState: Codable, Equatable {
 
     static let empty = AirplayState(
         isActive: false,
+        // .empty.isPlaying defaults to `true` so a freshly-arrived session
+        // (which never carries an explicit `isPlaying:false` on the first
+        // event) renders the pause glyph instead of the play glyph — i.e.
+        // "AirPlay just started, music is flowing".
+        isPlaying: true,
         title: "",
         artist: "",
         album: "",
@@ -73,6 +85,10 @@ extension AirplayState {
         let s = AirplayState.empty
         self.init(
             isActive:        d["isActive"]      as? Bool       ?? s.isActive,
+            // Default `true` when missing: a freshly-started session emits
+            // its first state event without an explicit `isPlaying` field on
+            // older backends, and "just started AirPlay" implies playing.
+            isPlaying:       d["isPlaying"]     as? Bool       ?? s.isPlaying,
             title:           d["title"]         as? String     ?? s.title,
             artist:          d["artist"]        as? String     ?? s.artist,
             album:           d["album"]         as? String     ?? s.album,

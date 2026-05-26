@@ -24,6 +24,7 @@ final class AirplayStoreTests: XCTestCase {
 
         let s = AirplayState(
             isActive: true,
+            isPlaying: true,
             title: "Time",
             artist: "Pink Floyd",
             album: "DSOTM",
@@ -148,6 +149,50 @@ final class AirplayStoreTests: XCTestCase {
 
         store.tick()
         XCTAssertEqual(store.state.seekSeconds, 100, "tick stays clamped at duration")
+    }
+
+    /// Mid-flight contract amendment: `isPlaying=false` means the iPhone
+    /// paused the AirPlay stream. The 1Hz interpolator MUST freeze in this
+    /// state — otherwise the seek bar drifts past where the audio actually
+    /// is, and re-syncs jarringly when the user resumes.
+    func testTickDoesNotAdvanceWhilePaused() {
+        let store = AirplayStore()
+        var s = AirplayState.empty
+        s.isActive = true
+        s.isPlaying = false       // iPhone paused mid-session
+        s.sessionID = "s-1"
+        s.seekSeconds = 30
+        s.durationSeconds = 100
+        store.state = s
+
+        store.tick()
+        XCTAssertEqual(store.state.seekSeconds, 30,
+                       "tick must not advance seek while isPlaying=false")
+
+        store.tick()
+        XCTAssertEqual(store.state.seekSeconds, 30,
+                       "tick is still a no-op on subsequent calls while paused")
+    }
+
+    func testTickResumesAdvancingWhenIsPlayingFlipsTrue() {
+        // Round-trip the pause→resume case: tick frozen, then once
+        // isPlaying flips back to true the elapsed counter resumes.
+        let store = AirplayStore()
+        var s = AirplayState.empty
+        s.isActive = true
+        s.isPlaying = false
+        s.sessionID = "s-1"
+        s.seekSeconds = 30
+        s.durationSeconds = 100
+        store.state = s
+
+        store.tick()
+        XCTAssertEqual(store.state.seekSeconds, 30, "frozen while paused")
+
+        store.state.isPlaying = true
+        store.tick()
+        XCTAssertEqual(store.state.seekSeconds, 31,
+                       "tick must resume advancing once isPlaying flips true")
     }
 
     func testTickWithZeroDurationStillAdvances() {

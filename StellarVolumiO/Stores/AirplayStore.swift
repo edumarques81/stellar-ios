@@ -58,11 +58,16 @@ final class AirplayStore {
 
     // MARK: - Seek ticker
 
-    /// Advance `seekSeconds` by 1 while the session is active. The Stellar
-    /// backend deliberately omits seek from its diff comparison — clients
-    /// interpolate locally between broadcasts. Mirrors `PlayerStore.tick()`.
+    /// Advance `seekSeconds` by 1 while the session is active AND playing.
+    /// The Stellar backend deliberately omits seek from its diff comparison
+    /// — clients interpolate locally between broadcasts. Mirrors
+    /// `PlayerStore.tick()`.
+    ///
+    /// Gating on `isPlaying` (in addition to `isActive`) means a session
+    /// paused from the iPhone freezes the elapsed counter — without this,
+    /// the seek bar would keep ticking past where the audio actually is.
     func tick() {
-        guard state.isActive else { return }
+        guard state.isActive, state.isPlaying else { return }
         guard state.durationSeconds > 0 else {
             state.seekSeconds += 1
             return

@@ -47,6 +47,41 @@ struct NowPlayingDisplayState {
     var isAirplay: Bool { airplaySender != nil }
 }
 
+extension NowPlayingDisplayState {
+    /// Build an AirPlay-source display state from the canonical
+    /// `AirplayState`. Factored out so the adapter is unit-testable in
+    /// isolation (no need to stand up a SwiftUI host).
+    ///
+    /// Wiring contract:
+    /// - `isPlaying` reads `state.isPlaying` (NOT `state.isActive`) so the
+    ///   play/pause glyph flips when the iPhone pauses Apple Music
+    ///   mid-session. `isActive` only gates the branch selection in
+    ///   NowPlayingView; once we're inside the AirPlay branch, `isPlaying`
+    ///   alone owns the transport icon.
+    /// - `canSeek` is always false — DACP has no seek surface.
+    /// - `canControl` gates the transport buttons on the backend having
+    ///   resolved the Active-Remote token.
+    /// - `airplaySender` carrying the device name is what flags this as
+    ///   the AirPlay branch to the renderer.
+    static func from(airplay s: AirplayState) -> NowPlayingDisplayState {
+        NowPlayingDisplayState(
+            title: s.title,
+            artist: s.artist,
+            album: s.album,
+            trackType: "",
+            samplerate: "",
+            bitdepth: "",
+            seekSeconds: s.seekSecondsDouble,
+            durationSeconds: s.durationSecondsDouble,
+            isPlaying: s.isPlaying,
+            canSeek: false,
+            canControl: s.canControl,
+            airplaySender: s.sender,
+            albumArt: s.coverDataURL.isEmpty ? .none : .dataURL(s.coverDataURL)
+        )
+    }
+}
+
 // MARK: - Transport callbacks
 //
 // Source-neutral closures bundled together so the view stays oblivious to

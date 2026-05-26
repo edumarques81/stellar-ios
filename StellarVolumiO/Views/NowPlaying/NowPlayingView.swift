@@ -100,27 +100,10 @@ struct NowPlayingView: View {
     // MARK: - AirPlay adapter
 
     private var airplayDisplayState: NowPlayingDisplayState {
-        // AirPlay treats the session as "playing" whenever it's active —
-        // shairport-sync's metadata pipe doesn't expose a paused-but-still-
-        // tuned distinction. The DACP-side pause command flips isActive
-        // only on stream-end. UI-side, isPlaying mirrors isActive.
-        NowPlayingDisplayState(
-            title: airplay.state.title,
-            artist: airplay.state.artist,
-            album: airplay.state.album,
-            trackType: "",
-            samplerate: "",
-            bitdepth: "",
-            seekSeconds: airplay.state.seekSecondsDouble,
-            durationSeconds: airplay.state.durationSecondsDouble,
-            isPlaying: airplay.state.isActive,
-            canSeek: false,                          // DACP doesn't expose seek
-            canControl: airplay.state.canControl,    // gates on Active-Remote token
-            airplaySender: airplay.state.sender,
-            albumArt: airplay.state.coverDataURL.isEmpty
-                ? .none
-                : .dataURL(airplay.state.coverDataURL)
-        )
+        // Adapter logic lives in `NowPlayingDisplayState.from(airplay:)` so
+        // it's unit-testable without standing up a SwiftUI host. See its
+        // doc-comment for the isPlaying/canSeek/canControl wiring contract.
+        .from(airplay: airplay.state)
     }
 
     private var airplayCallbacks: NowPlayingTransportCallbacks {

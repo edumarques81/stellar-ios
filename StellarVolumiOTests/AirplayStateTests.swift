@@ -137,6 +137,47 @@ final class AirplayStateTests: XCTestCase {
         XCTAssertNotEqual(a, b, "different sessionIDs must be !=")
     }
 
+    // MARK: - isPlaying (mid-flight contract amendment)
+    //
+    // `isPlaying` is a separate top-level bool from `isActive`:
+    //   isActive  = "AirPlay session is alive" (true while sender connected)
+    //   isPlaying = "currently playing vs. paused" (iPhone-side transport)
+    //
+    // The play/pause glyph reads isPlaying so the user sees the correct icon
+    // when they pause Apple Music mid-session. Default-true-when-missing
+    // covers the "freshly started, no explicit isPlaying yet" case.
+
+    func testIsPlayingDecodesExplicitTrue() {
+        let dict: [String: Any] = [
+            "isActive": true, "isPlaying": true, "sessionID": "s1"
+        ]
+        let s = AirplayState(rawDict: dict)
+        XCTAssertEqual(s?.isPlaying, true)
+    }
+
+    func testIsPlayingDecodesExplicitFalse() {
+        let dict: [String: Any] = [
+            "isActive": true, "isPlaying": false, "sessionID": "s1"
+        ]
+        let s = AirplayState(rawDict: dict)
+        XCTAssertEqual(s?.isPlaying, false,
+                       "explicit isPlaying:false must decode as false (user paused)")
+    }
+
+    func testIsPlayingDefaultsToTrueWhenMissing() {
+        // A freshly-started session emits its first state event without an
+        // explicit `isPlaying` field on older backends. "AirPlay just
+        // started" implies playing, not paused.
+        let dict: [String: Any] = ["isActive": true, "sessionID": "s1"]
+        let s = AirplayState(rawDict: dict)
+        XCTAssertEqual(s?.isPlaying, true,
+                       "missing isPlaying must default to true (just-started session)")
+    }
+
+    func testEmptyDefaultIsPlayingIsTrue() {
+        XCTAssertEqual(AirplayState.empty.isPlaying, true)
+    }
+
     // MARK: - Ended payload
 
     func testEndedDecodesSessionID() {
