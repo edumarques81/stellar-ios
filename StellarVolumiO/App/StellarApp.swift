@@ -9,6 +9,7 @@ struct StellarApp: App {
     @State private var discovery = BackendDiscoveryService()
     @State private var socketService: SocketService
     @State private var playerStore = PlayerStore()
+    @State private var airplayStore = AirplayStore()
     @State private var albumStore = AlbumPickerStore()
     @State private var artistStore = ArtistPickerStore()
     @State private var albumTracksStore = AlbumTracksStore()
@@ -38,6 +39,7 @@ struct StellarApp: App {
                 .environment(backendConfig)
                 .environment(discovery)
                 .environment(playerStore)
+                .environment(airplayStore)
                 .environment(albumStore)
                 .environment(artistStore)
                 .environment(albumTracksStore)
@@ -46,6 +48,7 @@ struct StellarApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     playerStore.bind(to: socketService)
+                    airplayStore.bind(to: socketService)
                     albumStore.bind(to: socketService)
                     artistStore.bind(to: socketService)
                     albumTracksStore.bind(to: socketService)
