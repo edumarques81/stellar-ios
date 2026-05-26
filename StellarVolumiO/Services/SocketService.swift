@@ -457,6 +457,21 @@ extension SocketService {
     func airplayPlayPause()  { emitObject("airplay:command", ["cmd": "toggle"]) }
     func airplayNext()       { emitObject("airplay:command", ["cmd": "next"]) }
     func airplayPrev()       { emitObject("airplay:command", ["cmd": "prev"]) }
+
+    /// Ask the backend to re-push the current AirPlay session state to
+    /// this client. The backend's handler replies with a targeted
+    /// `pushAirplayState` (or no-op if no session is active).
+    ///
+    /// Use cases:
+    ///   - App returns to foreground: the socket may still be connected,
+    ///     so no reconnect-on-connect rehydration fires; without this
+    ///     call the UI stays on its stale "before backgrounding" state.
+    ///   - User navigates to the Now Playing tab and the previous fetch
+    ///     was too long ago.
+    func requestAirplayState() {
+        ensureInitialised()
+        socket?.emit("getAirplayState")
+    }
 }
 
 // MARK: - Test hooks

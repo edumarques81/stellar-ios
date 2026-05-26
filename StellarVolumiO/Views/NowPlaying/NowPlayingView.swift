@@ -36,6 +36,14 @@ struct NowPlayingView: View {
             .scrollIndicators(.hidden)
             .contentMargins(.bottom, 16, for: .scrollContent)
         }
+        // Re-fetch the AirPlay snapshot whenever the tab becomes visible.
+        // Covers the case where the user backgrounds the app, an AirPlay
+        // session starts/ends/changes track, then they refocus — without
+        // this the view stays on its stale prior state until shairport
+        // happens to emit a new metadata frame.
+        .onAppear {
+            socket.requestAirplayState()
+        }
     }
 
     @ViewBuilder

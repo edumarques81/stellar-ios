@@ -61,6 +61,13 @@ struct StellarApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                     socketService.reconnectIfNeeded()
+                    // Foreground rehydration: when the socket is still
+                    // alive (the common case for a short backgrounding),
+                    // reconnectIfNeeded is a no-op and no on-connect
+                    // pushAirplayState arrives. Explicitly request the
+                    // current AirPlay snapshot so a session that started
+                    // while we were backgrounded shows up immediately.
+                    socketService.requestAirplayState()
                 }
         }
     }
