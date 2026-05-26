@@ -166,4 +166,73 @@ final class BackendConfigStoreTests: XCTestCase {
         XCTAssertEqual(store.host, BackendConfigStore.defaultHost,
                        "garbage discovery values must not corrupt the fallback chain")
     }
+
+    // MARK: - host:port disambiguation (regression: app panic 2026-05-27)
+    //
+    // A user typing "Eduardos-Laptop.local:3000" into Settings' Manual entry
+    // host field used to be stored verbatim. SocketService later built
+    // "http://Eduardos-Laptop.local:3000:3000" — URL(string:) returns nil,
+    // and the force-unwrap crashed the app on every launch.
+    // setCustom() must split host:port at the boundary and store them
+    // separately, AND the host getter must sanitize any pre-existing dirty
+    // storage on read so already-crashed users can recover without a
+    // reinstall.
+
+    func testSetCustomSplitsHostAndPortWhenHostContainsColon() throws {
+        let store = BackendConfigStore(defaults: defaults)
+        try store.setCustom(host: "Eduardos-Laptop.local:3000", port: nil, scheme: nil)
+        XCTAssertEqual(store.host, "Eduardos-Laptop.local",
+                       "setCustom must strip :port from the host field")
+        XCTAssertEqual(store.port, 3000,
+                       "setCustom must promote the trailing :port into the port slot")
+    }
+
+    func testSetCustomExplicitPortBeatsEmbeddedPort() throws {
+        // When the caller passes BOTH an embedded port in the host AND an
+        // explicit port argument, the explicit one wins — the form's port
+        // field is the authoritative input.
+        let store = BackendConfigStore(defaults: defaults)
+        try store.setCustom(host: "foo.local:9999", port: 4242, scheme: nil)
+        XCTAssertEqual(store.host, "foo.local")
+        XCTAssertEqual(store.port, 4242)
+    }
+
+    func testSetCustomStripsSchemePrefixFromHost() throws {
+        // Users sometimes paste a full URL into the host field. Strip it.
+        let store = BackendConfigStore(defaults: defaults)
+        try store.setCustom(host: "http://foo.local:3000", port: nil, scheme: nil)
+        XCTAssertEqual(store.host, "foo.local")
+        XCTAssertEqual(store.port, 3000)
+    }
+
+    func testSetCustomRejectsInvalidEmbeddedPort() {
+        let store = BackendConfigStore(defaults: defaults)
+        XCTAssertThrowsError(try store.setCustom(host: "foo:bad", port: nil, scheme: nil)) { err in
+            XCTAssertEqual(err as? BackendConfigStore.ValidationError, .invalidPort,
+                           "non-numeric embedded port must surface as invalidPort, not be silently dropped")
+        }
+        XCTAssertThrowsError(try store.setCustom(host: "foo:70000", port: nil, scheme: nil)) { err in
+            XCTAssertEqual(err as? BackendConfigStore.ValidationError, .invalidPort)
+        }
+    }
+
+    func testHostGetterSanitizesPreExistingDirtyStorage() {
+        // Simulate an already-crashed user: the bad form-input was persisted
+        // verbatim by a previous (pre-fix) build. The new code must clean it
+        // on read so the app can launch without a reinstall.
+        defaults.set("Eduardos-Laptop.local:3000", forKey: BackendConfigStore.Key.customHost)
+        let store = BackendConfigStore(defaults: defaults)
+        XCTAssertEqual(store.host, "Eduardos-Laptop.local",
+                       "stale dirty storage must not crash the URL builder on next launch")
+    }
+
+    func testCurrentURLStringNeverContainsDoublePort() {
+        // Defense-in-depth: even if storage somehow has dirt the getter
+        // missed, currentURLString (and by extension the SocketService URL)
+        // must produce a parseable scheme://host:port form.
+        defaults.set("foo:3000", forKey: BackendConfigStore.Key.customHost)
+        let store = BackendConfigStore(defaults: defaults)
+        let url = URL(string: store.currentURLString)
+        XCTAssertNotNil(url, "currentURLString must always be parseable; got \(store.currentURLString)")
+    }
 }

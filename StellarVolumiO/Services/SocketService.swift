@@ -128,7 +128,20 @@ final class SocketService {
         serverPort = resolvedPort
         serverScheme = resolvedScheme
 
-        let url = URL(string: "\(resolvedScheme)://\(resolvedHost):\(resolvedPort)")!
+        // Defense-in-depth: NEVER force-unwrap the URL — a malformed host
+        // (e.g. legacy persisted "host:3000" before the BackendConfigStore
+        // splitting fix landed, or a future bug in the resolver chain) used
+        // to crash the app on every launch. Fall back to the hardcoded
+        // default if URL construction fails so the user can recover via
+        // Settings instead of being stuck in a panic loop.
+        let primary = "\(resolvedScheme)://\(resolvedHost):\(resolvedPort)"
+        let url: URL = URL(string: primary) ?? {
+            let fallback = "\(BackendConfigStore.defaultScheme)://\(BackendConfigStore.defaultHost):\(BackendConfigStore.defaultPort)"
+            // String-form default is hand-crafted and known-good — but we
+            // still nil-coalesce to a guaranteed valid URL as a last resort
+            // so this expression cannot crash under any circumstance.
+            return URL(string: fallback) ?? URL(string: "http://127.0.0.1:3000")!
+        }()
 
         manager = SocketManager(
             socketURL: url,
