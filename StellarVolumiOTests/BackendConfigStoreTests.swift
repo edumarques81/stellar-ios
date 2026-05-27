@@ -27,11 +27,11 @@ final class BackendConfigStoreTests: XCTestCase {
 
     func testFallsBackToHardcodedDefaultWhenNoConfigPresent() {
         let store = BackendConfigStore(defaults: defaults)
-        XCTAssertEqual(store.host, "192.168.86.221",
-                       "out-of-the-box host must match the previous hardcoded constant")
+        XCTAssertEqual(store.host, "Eduardos-Laptop.local",
+                       "out-of-the-box host must match the mDNS hostname default (DHCP-proof since 2026-05-28)")
         XCTAssertEqual(store.port, 3000)
         XCTAssertEqual(store.scheme, "http")
-        XCTAssertEqual(store.currentURLString, "http://192.168.86.221:3000")
+        XCTAssertEqual(store.currentURLString, "http://Eduardos-Laptop.local:3000")
         XCTAssertFalse(store.hasCustomConfig)
     }
 

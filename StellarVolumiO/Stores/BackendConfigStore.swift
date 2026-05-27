@@ -10,7 +10,13 @@ import Observation
 ///   1. **Custom** — user-entered values in Settings (Manual entry).
 ///   2. **Discovered** — last successful Bonjour discovery result
 ///      (`BackendDiscoveryService.recordDiscovered(...)`).
-///   3. **Default** — the original hardcoded `192.168.86.221:3000` over `http`.
+///   3. **Default** — `Eduardos-Laptop.local:3000` over `http`. Was a pinned
+///      LAN IP `192.168.86.221` historically but the Mac's DHCP lease shifted
+///      to `.84` on 2026-05-28 and broke every fresh-install connect attempt
+///      ("Host is down" in 1ms). The mDNS hostname survives Mac IP changes
+///      because Apple's NSURLSession resolves `.local` via mDNSResponder.
+///      Bonjour-based auto-adopt (Phase H') is the permanent answer; this
+///      default-tier hostname is the belt for that braces.
 ///
 /// This preserves the original out-of-the-box behaviour so users who never open
 /// Settings still connect to the existing Mac stellar backend.
@@ -34,7 +40,7 @@ final class BackendConfigStore {
     // Preserved from `SocketService.defaultHost` so a fresh install (no custom
     // config, no discovered server) keeps the existing connect-on-launch
     // behaviour without surprise.
-    static let defaultHost: String   = "192.168.86.221"
+    static let defaultHost: String   = "Eduardos-Laptop.local"
     static let defaultPort: Int      = 3000
     static let defaultScheme: String = "http"
 
