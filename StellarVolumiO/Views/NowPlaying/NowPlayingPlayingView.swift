@@ -145,15 +145,24 @@ struct NowPlayingPlayingView: View {
                 .padding(.top, 10)
             }
 
-            SeekBar(
-                currentSeconds: state.seekSeconds,
-                totalSeconds: state.durationSeconds,
-                onSeek: state.canSeek ? callbacks.onSeek : { _ in }
-            )
-            .padding(.top, 18)
-            .padding(.horizontal, 24)
-            .opacity(state.canSeek ? 1.0 : 0.6)
-            .allowsHitTesting(state.canSeek)
+            // AirPlay branch hides the SeekBar entirely (progress + elapsed
+            // + duration). shairport-sync's `prgr` cadence is too sparse to
+            // sustain per-second accuracy, and the chain of fixes (Phase H
+            // seek-reset, Phase K wall-clock advance) still left visible
+            // drift + clamp-at-duration regressions. User chose 2026-05-28
+            // to cut the feature rather than patch further. See
+            // [[feedback_drop_airplay_time_tracking]].
+            if !state.isAirplay {
+                SeekBar(
+                    currentSeconds: state.seekSeconds,
+                    totalSeconds: state.durationSeconds,
+                    onSeek: state.canSeek ? callbacks.onSeek : { _ in }
+                )
+                .padding(.top, 18)
+                .padding(.horizontal, 24)
+                .opacity(state.canSeek ? 1.0 : 0.6)
+                .allowsHitTesting(state.canSeek)
+            }
 
             HStack(spacing: 28) {
                 TransportIconButton(icon: "backward.fill", enabled: state.canControl) {
