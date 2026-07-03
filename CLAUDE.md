@@ -1,6 +1,13 @@
 # Stellar VolumiO — iOS App
 # CLAUDE.md — Agent Context
 
+> **⚠️ Backend host update — Pi migration (2026-07-03).** The backend now runs
+> on the Pi itself, so `BackendConfigStore.defaultHost` is **`stellar.local`**
+> (was `Eduardos-Laptop.local` / the Mac). A fresh install connects to the Pi
+> out of the box; Bonjour `_stellar._tcp` + Manual entry still override. Any
+> prose below referencing `192.168.86.221` / `Eduardos-Laptop.local` / "the Mac
+> backend" as the default is historical. See workspace-root `MIGRATION-PLAN.md`.
+
 ## Scope
 
 This app is a **minimal remote control** for the Stellar backend. It has exactly six user-facing features and nothing else:
