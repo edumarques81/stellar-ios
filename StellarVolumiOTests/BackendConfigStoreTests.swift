@@ -27,11 +27,11 @@ final class BackendConfigStoreTests: XCTestCase {
 
     func testFallsBackToHardcodedDefaultWhenNoConfigPresent() {
         let store = BackendConfigStore(defaults: defaults)
-        XCTAssertEqual(store.host, "Eduardos-Laptop.local",
-                       "out-of-the-box host must match the mDNS hostname default (DHCP-proof since 2026-05-28)")
+        XCTAssertEqual(store.host, "stellar.local",
+                       "out-of-the-box host must match the Pi appliance mDNS default (Pi migration 2026-07-03)")
         XCTAssertEqual(store.port, 3000)
         XCTAssertEqual(store.scheme, "http")
-        XCTAssertEqual(store.currentURLString, "http://Eduardos-Laptop.local:3000")
+        XCTAssertEqual(store.currentURLString, "http://stellar.local:3000")
         XCTAssertFalse(store.hasCustomConfig)
     }
 
