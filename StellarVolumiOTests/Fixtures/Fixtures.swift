@@ -100,6 +100,37 @@ enum Fixtures {
 
     static let pushLastPlayedAlbumNull: Any = NSNull()
 
+    // Phase 3 (2026-08-12): badge + discCount on Album, disc on Track,
+    // looseTracks on ArtistAlbumsResponse — all additive/optional.
+    static let pushLibraryAlbumsWithBadgeAndDiscCount: [String: Any] = [
+        "albums": [
+            ["title": "Symphony No. 2",
+             "artist": "Gustav Mahler",
+             "uri": "NAS/Mahler/Symphony No 2",
+             "albumart": "/albumart?path=NAS/Mahler/Symphony%20No%202",
+             "badge": "352.8kHz/24bit FLAC",
+             "discCount": 11],
+            ["title": "Kind of Blue",
+             "artist": "Miles Davis",
+             "uri": "NAS/Miles Davis/Kind of Blue",
+             "albumart": "/albumart?path=NAS/Miles%20Davis/Kind%20of%20Blue"]
+        ],
+        "total": 2
+    ]
+
+    static let pushLibraryArtistAlbumsWithLooseTracks: [String: Any] = [
+        "artist": "Woody Allen Loose Cuts",
+        "albums": [Any](),
+        "looseTracks": [
+            ["id": "t1", "title": "Loose Cut One", "artist": "Woody Allen Loose Cuts",
+             "album": "", "uri": "NAS/Loose/one.flac", "trackNumber": 1, "duration": 120,
+             "albumArt": "", "source": "mpd"],
+            ["id": "t2", "title": "Loose Cut Two", "artist": "Woody Allen Loose Cuts",
+             "album": "", "uri": "NAS/Loose/two.flac", "trackNumber": 2, "duration": 95,
+             "albumArt": "", "source": "mpd"]
+        ]
+    ]
+
     // Real-backend shape captured 2026-05-24 via socket.io probe — camelCase
     // albumArt, no `total` (it's in `pagination` instead), no `year`. Pins
     // the Task 1.11 fix that switched LibraryAlbum.init?(rawDict:) to read

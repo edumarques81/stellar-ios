@@ -84,4 +84,51 @@ final class LibraryEnvelopeParserTests: XCTestCase {
         XCTAssertEqual(env?.albums[0].albumart,
                        "/albumart?path=NAS/Pink%20Floyd/Dark%20Side")
     }
+
+    // MARK: - Phase 3 (2026-08-12): badge, discCount, disc, looseTracks
+
+    func testLibraryAlbumParsesBadgeAndDiscCountWhenPresent() {
+        let env = PushLibraryAlbums(rawDict: Fixtures.pushLibraryAlbumsWithBadgeAndDiscCount)
+        XCTAssertEqual(env?.albums[0].badge, "352.8kHz/24bit FLAC")
+        XCTAssertEqual(env?.albums[0].discCount, 11)
+    }
+
+    func testLibraryAlbumBadgeAndDiscCountNilWhenAbsent() {
+        let env = PushLibraryAlbums(rawDict: Fixtures.pushLibraryAlbumsWithBadgeAndDiscCount)
+        XCTAssertNil(env?.albums[1].badge, "unique album (no badge key) must decode to nil, not empty string")
+        XCTAssertNil(env?.albums[1].discCount, "single-disc album (no discCount key) must decode to nil")
+    }
+
+    func testTrackParsesDiscWhenPresent() {
+        let raw: [String: Any] = ["id": "t1", "title": "Movement II", "artist": "Mahler",
+                                   "album": "Symphony No. 2", "uri": "NAS/Mahler/disc2/02.flac",
+                                   "trackNumber": 2, "duration": 900, "albumArt": "",
+                                   "source": "mpd", "disc": 2]
+        let track = Track(rawDict: raw)
+        XCTAssertEqual(track?.disc, 2)
+    }
+
+    func testTrackDiscDefaultsToZeroWhenAbsent() {
+        let raw: [String: Any] = ["id": "t1", "title": "Solo Track", "artist": "Someone",
+                                   "album": "", "uri": "NAS/solo.flac",
+                                   "trackNumber": 1, "duration": 200, "albumArt": "", "source": "mpd"]
+        let track = Track(rawDict: raw)
+        XCTAssertEqual(track?.disc, 0, "matches the existing trackNumber/duration zero-default convention")
+    }
+
+    func testPushLibraryArtistAlbumsParsesLooseTracksWhenAlbumsEmpty() {
+        let env = PushLibraryArtistAlbums(rawDict: Fixtures.pushLibraryArtistAlbumsWithLooseTracks)
+        XCTAssertNotNil(env)
+        XCTAssertEqual(env?.albums.count, 0)
+        XCTAssertEqual(env?.looseTracks?.count, 2)
+        XCTAssertEqual(env?.looseTracks?[0].title, "Loose Cut One")
+        XCTAssertEqual(env?.looseTracks?[1].title, "Loose Cut Two")
+    }
+
+    func testPushLibraryArtistAlbumsLooseTracksNilWhenKeyAbsent() {
+        // Fixtures.pushLibraryArtistAlbumsCanonical has non-empty albums and no looseTracks key.
+        let env = PushLibraryArtistAlbums(rawDict: Fixtures.pushLibraryArtistAlbumsCanonical)
+        XCTAssertNotNil(env)
+        XCTAssertNil(env?.looseTracks, "absent looseTracks key must decode to nil, not []")
+    }
 }

@@ -131,6 +131,72 @@ final class LibraryAutoRefreshTests: XCTestCase {
                       "drill-in must flip loadingArtistAlbums=true while the refetch is in flight")
     }
 
+    // MARK: - ArtistPickerStore.applyArtistAlbumsPayload (BROWSE-04/ARTIST-04)
+
+    func testApplyArtistAlbumsPayloadPopulatesLooseTracksWhenAlbumsEmpty() {
+        let store = ArtistPickerStore()
+        let looseTrack = Track(id: "t1", title: "Loose Cut", artist: "Woody Allen Loose Cuts",
+                                album: "", uri: "NAS/Loose/one.flac",
+                                trackNumber: 1, duration: 120, albumArt: "", source: "mpd")
+        let payload = PushLibraryArtistAlbums(artist: "Woody Allen Loose Cuts", albums: [],
+                                               looseTracks: [looseTrack])
+
+        store.applyArtistAlbumsPayload(payload)
+
+        XCTAssertTrue(store.artistAlbums.isEmpty)
+        XCTAssertEqual(store.artistLooseTracks.count, 1)
+        XCTAssertEqual(store.artistLooseTracks[0].title, "Loose Cut")
+        XCTAssertFalse(store.loadingArtistAlbums)
+    }
+
+    func testApplyArtistAlbumsPayloadLeavesLooseTracksEmptyWhenAlbumsNonEmpty() {
+        let store = ArtistPickerStore()
+        let album = LibraryAlbum(id: "NAS/Daft Punk/Discovery", title: "Discovery",
+                                  artist: "Daft Punk", uri: "NAS/Daft Punk/Discovery",
+                                  albumart: "")
+        // Malformed/stale payload: albums non-empty AND looseTracks present —
+        // must still be treated as "not a loose-track artist" per the
+        // backend's documented invariant (looseTracks only when albums empty).
+        let looseTrack = Track(id: "t1", title: "Stale Loose Cut", artist: "Daft Punk",
+                                album: "", uri: "NAS/stale.flac",
+                                trackNumber: 1, duration: 10, albumArt: "", source: "mpd")
+        let payload = PushLibraryArtistAlbums(artist: "Daft Punk", albums: [album],
+                                               looseTracks: [looseTrack])
+
+        store.applyArtistAlbumsPayload(payload)
+
+        XCTAssertEqual(store.artistAlbums.count, 1)
+        XCTAssertTrue(store.artistLooseTracks.isEmpty,
+                      "looseTracks must never surface alongside a non-empty album grid")
+    }
+
+    func testClearSelectionResetsArtistLooseTracks() {
+        let store = ArtistPickerStore()
+        store.artistLooseTracks = [
+            Track(id: "t1", title: "Loose Cut", artist: "X", album: "", uri: "NAS/x.flac",
+                  trackNumber: 1, duration: 10, albumArt: "", source: "mpd")
+        ]
+
+        store.clearSelection()
+
+        XCTAssertTrue(store.artistLooseTracks.isEmpty)
+    }
+
+    func testSelectResetsArtistLooseTracksBeforeRefetch() {
+        let socket = SocketService()
+        let store = ArtistPickerStore()
+        store.bind(to: socket)
+        store.artistLooseTracks = [
+            Track(id: "t1", title: "Stale", artist: "X", album: "", uri: "NAS/x.flac",
+                  trackNumber: 1, duration: 10, albumArt: "", source: "mpd")
+        ]
+
+        store.select(LibraryArtist(id: "Daft Punk", name: "Daft Punk"))
+
+        XCTAssertTrue(store.artistLooseTracks.isEmpty,
+                      "select() must clear stale loose tracks from a previously-viewed artist")
+    }
+
     // MARK: - AlbumTracksStore
 
     func testAlbumTracksRefetchesWhenCacheUpdatedAndAlbumIsLoaded() {

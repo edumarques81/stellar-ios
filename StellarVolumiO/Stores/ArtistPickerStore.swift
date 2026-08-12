@@ -13,6 +13,12 @@ final class ArtistPickerStore {
     var artistAlbums: [LibraryAlbum] = []
     var loadingArtistAlbums: Bool = false
 
+    /// ARTIST-04/BROWSE-04: populated when the drilled-in artist resolves to
+    /// zero albums but has playable tracks outside any album. Only ever
+    /// non-empty when `artistAlbums` is empty — the backend sends `looseTracks`
+    /// only in that case, and this store mirrors that invariant on reset.
+    var artistLooseTracks: [Track] = []
+
     private weak var socket: SocketService?
 
     func bind(to socket: SocketService) {
@@ -24,8 +30,7 @@ final class ArtistPickerStore {
         }
         socket.onRawDict("pushLibraryArtistAlbums",
                          parser: PushLibraryArtistAlbums.init(rawDict:)) { [weak self] (payload: PushLibraryArtistAlbums) in
-            self?.artistAlbums = payload.albums
-            self?.loadingArtistAlbums = false
+            self?.applyArtistAlbumsPayload(payload)
         }
         // See AlbumPickerStore for the rationale on this listener.
         socket.on("library:cache:updated") { [weak self] in
@@ -50,6 +55,19 @@ final class ArtistPickerStore {
         }
     }
 
+    /// Applies a `pushLibraryArtistAlbums` payload to store state. Extracted
+    /// from the `bind(to:)` closure so unit tests can drive it directly
+    /// (matching AlbumPickerStore.handleLibraryCacheUpdated's testability
+    /// convention) without simulating a live socket event.
+    func applyArtistAlbumsPayload(_ payload: PushLibraryArtistAlbums) {
+        artistAlbums = payload.albums
+        // Backend only ever sends looseTracks when albums is empty (ARTIST-04/
+        // BROWSE-04), but guard defensively here too so stale/malformed
+        // payloads can never show both a grid AND a loose-track fallback.
+        artistLooseTracks = payload.albums.isEmpty ? (payload.looseTracks ?? []) : []
+        loadingArtistAlbums = false
+    }
+
     func load(scope: String = "all", sort: String = "alphabetical") {
         guard let socket else { return }
         loading = true
@@ -66,6 +84,7 @@ final class ArtistPickerStore {
         guard let socket else { return }
         selectedArtist = artist
         artistAlbums = []
+        artistLooseTracks = []
         loadingArtistAlbums = true
         socket.emitObject("library:artist:albums", ["artist": artist.name])
     }
@@ -73,6 +92,7 @@ final class ArtistPickerStore {
     func clearSelection() {
         selectedArtist = nil
         artistAlbums = []
+        artistLooseTracks = []
         loadingArtistAlbums = false
     }
 

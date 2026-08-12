@@ -12,9 +12,11 @@ struct LibraryAlbum: Codable, Identifiable, Equatable, Hashable {
     let albumart: String // path or URL ('/albumart?path=...' shape)
     let year: Int?
     let trackCount: Int?
+    let badge: String?     // BROWSE-02/03: disambiguation badge for a title+artist duplicate group; nil when unique
+    let discCount: Int?    // BROWSE-07: >1 for a collapsed multi-disc box set; nil/absent for a normal album
 
     enum CodingKeys: String, CodingKey {
-        case title, artist, uri, albumart, year, trackCount
+        case title, artist, uri, albumart, year, trackCount, badge, discCount
     }
 
     init(from decoder: Decoder) throws {
@@ -25,10 +27,12 @@ struct LibraryAlbum: Codable, Identifiable, Equatable, Hashable {
         albumart    = try c.decodeIfPresent(String.self, forKey: .albumart) ?? ""
         year        = try c.decodeIfPresent(Int.self, forKey: .year)
         trackCount  = try c.decodeIfPresent(Int.self, forKey: .trackCount)
+        badge       = try c.decodeIfPresent(String.self, forKey: .badge)
+        discCount   = try c.decodeIfPresent(Int.self, forKey: .discCount)
         id          = uri.isEmpty ? "\(artist)|\(title)" : uri
     }
 
-    init(id: String, title: String, artist: String, uri: String, albumart: String, year: Int? = nil, trackCount: Int? = nil) {
+    init(id: String, title: String, artist: String, uri: String, albumart: String, year: Int? = nil, trackCount: Int? = nil, badge: String? = nil, discCount: Int? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
@@ -36,6 +40,8 @@ struct LibraryAlbum: Codable, Identifiable, Equatable, Hashable {
         self.albumart = albumart
         self.year = year
         self.trackCount = trackCount
+        self.badge = badge
+        self.discCount = discCount
     }
 
     func encode(to encoder: Encoder) throws {
@@ -46,6 +52,8 @@ struct LibraryAlbum: Codable, Identifiable, Equatable, Hashable {
         try c.encode(albumart, forKey: .albumart)
         try c.encodeIfPresent(year, forKey: .year)
         try c.encodeIfPresent(trackCount, forKey: .trackCount)
+        try c.encodeIfPresent(badge, forKey: .badge)
+        try c.encodeIfPresent(discCount, forKey: .discCount)
     }
 }
 
@@ -93,6 +101,7 @@ struct PushLibraryArtists: Codable {
 struct PushLibraryArtistAlbums: Codable {
     let artist: String?
     let albums: [LibraryAlbum]
+    let looseTracks: [Track]?  // ARTIST-04/BROWSE-04: populated ONLY when `albums` is empty
 }
 
 // MARK: - Track + Album Tracks
@@ -112,6 +121,24 @@ struct Track: Codable, Identifiable, Equatable, Hashable {
     let duration: Int     // seconds; 0 when absent
     let albumArt: String  // optional path; "" when absent
     let source: String    // SourceType from backend, treat as opaque string
+    let disc: Int         // BROWSE-07: MPD Disc tag, 1-based; 0 when absent — matches the
+                           // trackNumber/duration zero-default convention above. Defaults to 0
+                           // so existing `Track(id:...)` call sites that predate this field
+                           // keep compiling unchanged.
+
+    init(id: String, title: String, artist: String, album: String, uri: String,
+         trackNumber: Int, duration: Int, albumArt: String, source: String, disc: Int = 0) {
+        self.id = id
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.uri = uri
+        self.trackNumber = trackNumber
+        self.duration = duration
+        self.albumArt = albumArt
+        self.source = source
+        self.disc = disc
+    }
 }
 
 struct PushLibraryAlbumTracks: Codable {
@@ -183,8 +210,17 @@ extension PushLibraryArtistAlbums {
         let rawAlbums = d["albums"] as? [[String: Any]] ?? []
         let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }
         let artist = d["artist"] as? String
+        // Only populated by the backend when `albums` is empty (ARTIST-04/BROWSE-04).
+        // Absent key -> nil, not []; distinguishes "not sent" from "sent empty".
+        let looseTracks: [Track]?
+        if let rawLoose = d["looseTracks"] as? [[String: Any]] {
+            looseTracks = rawLoose.compactMap { Track(rawDict: $0) }
+        } else {
+            looseTracks = nil
+        }
         self.artist = artist
         self.albums = albums
+        self.looseTracks = looseTracks
     }
 }
 
@@ -198,9 +234,12 @@ extension LibraryAlbum {
         let albumart = (d["albumArt"] as? String) ?? (d["albumart"] as? String) ?? ""
         let year     = d["year"] as? Int
         let trackCount = d["trackCount"] as? Int
+        let badge      = d["badge"] as? String
+        let discCount  = d["discCount"] as? Int
         let id = uri.isEmpty ? "\(artist)|\(title)" : uri
         self.init(id: id, title: title, artist: artist, uri: uri,
-                  albumart: albumart, year: year, trackCount: trackCount)
+                  albumart: albumart, year: year, trackCount: trackCount,
+                  badge: badge, discCount: discCount)
     }
 }
 
@@ -227,6 +266,7 @@ extension Track {
         let duration    = (d["duration"]    as? Int) ?? 0
         let albumArt    = (d["albumArt"] as? String) ?? (d["albumart"] as? String) ?? ""
         let source      = d["source"] as? String ?? ""
+        let disc        = (d["disc"] as? Int) ?? 0
         let rawId       = d["id"] as? String ?? ""
         let id: String
         if !rawId.isEmpty {
@@ -238,7 +278,7 @@ extension Track {
         }
         self.init(id: id, title: title, artist: artist, album: album, uri: uri,
                   trackNumber: trackNumber, duration: duration,
-                  albumArt: albumArt, source: source)
+                  albumArt: albumArt, source: source, disc: disc)
     }
 }
 
