@@ -52,7 +52,8 @@ struct AlbumTracksView: View {
                     .padding(.top, 18)
 
                     TrackList(tracks: visibleTracks, loading: store.loading,
-                              errorMessage: store.errorMessage) { track in
+                              errorMessage: store.errorMessage,
+                              discCount: album.discCount ?? 0) { track in
                         playTrack(track)
                     }
                     .padding(.top, 16)
@@ -182,10 +183,17 @@ private struct PlayAlbumButton: View {
 
 // MARK: - Track list
 
-private struct TrackList: View {
+// Non-private: reused by ArtistDetailView's loose-track fallback (ARTIST-04/
+// BROWSE-04), which has no album/discCount context of its own — that call
+// site always passes discCount: 0 for the flat, non-grouped rendering.
+struct TrackList: View {
     let tracks: [Track]
     let loading: Bool
     let errorMessage: String?
+    /// BROWSE-07: >1 groups `tracks` into "Disc N" sections. Tracks arrive
+    /// pre-sorted by (disc, trackNumber, title) from the backend — grouping
+    /// here only collects consecutive same-disc runs, it never re-sorts.
+    var discCount: Int = 0
     let onTap: (Track) -> Void
 
     var body: some View {
@@ -205,6 +213,16 @@ private struct TrackList: View {
                     .font(StellarFont.bodyMedium)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 24)
+            } else if discCount > 1 && discGroups.count > 1 {
+                ForEach(discGroups, id: \.disc) { group in
+                    DiscHeader(disc: group.disc)
+                    ForEach(group.tracks) { track in
+                        TrackRow(track: track) { onTap(track) }
+                        Divider()
+                            .overlay(Stellar.Color.separator)
+                            .padding(.leading, 24)
+                    }
+                }
             } else {
                 ForEach(tracks) { track in
                     TrackRow(track: track) { onTap(track) }
@@ -215,9 +233,49 @@ private struct TrackList: View {
             }
         }
     }
+
+    private var discGroups: [(disc: Int, tracks: [Track])] {
+        Self.groupTracksByDisc(tracks)
+    }
+
+    /// Groups consecutive same-`disc` tracks in arrival order (already
+    /// pre-sorted by the backend). The body's `.count > 1` check guards the
+    /// case where `discCount` claims multi-disc but every track actually
+    /// carries the same (or absent/0) disc value — falls back to the flat
+    /// list rather than rendering a single spurious "Disc 0"/"Disc 1" header.
+    ///
+    /// `static` + `internal` (not `private`) so unit tests can exercise the
+    /// pure grouping algorithm directly, per this project's SwiftUI-view
+    /// testability convention (mirrors `AlbumPickerStore.computeFingerprint`)
+    /// — `swift test` can't render views (@Observable + UIKit-backed SwiftUI).
+    static func groupTracksByDisc(_ tracks: [Track]) -> [(disc: Int, tracks: [Track])] {
+        var groups: [(disc: Int, tracks: [Track])] = []
+        for track in tracks {
+            if let last = groups.last, last.disc == track.disc {
+                groups[groups.count - 1].tracks.append(track)
+            } else {
+                groups.append((disc: track.disc, tracks: [track]))
+            }
+        }
+        return groups
+    }
 }
 
-private struct TrackRow: View {
+struct DiscHeader: View {
+    let disc: Int
+
+    var body: some View {
+        Text(disc > 0 ? "Disc \(disc)" : "Disc")
+            .font(StellarFont.labelLarge)
+            .foregroundStyle(Stellar.Color.gold)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct TrackRow: View {
     let track: Track
     let onTap: () -> Void
 

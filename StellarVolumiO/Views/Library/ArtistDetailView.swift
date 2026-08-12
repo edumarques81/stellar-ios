@@ -44,7 +44,7 @@ private struct AlbumTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ZStack {
+            ZStack(alignment: .bottomLeading) {
                 Rectangle()
                     .fill(LinearGradient(
                         colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
@@ -56,6 +56,10 @@ private struct AlbumTile: View {
                     CachedAsyncImage(url: url) { image in
                         image.resizable().scaledToFill()
                     } placeholder: { EmptyView() }
+                }
+                if let badge = album.badge, !badge.isEmpty {
+                    AlbumDuplicateBadge(text: badge)
+                        .padding(6)
                 }
             }
             .aspectRatio(1, contentMode: .fit)
