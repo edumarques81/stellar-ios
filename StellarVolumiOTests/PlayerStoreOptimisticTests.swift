@@ -92,6 +92,10 @@ final class PlayerStoreOptimisticTests: XCTestCase {
     /// SeekBar fix: while playing, calling `tick()` once per second must
     /// advance `state.seek` by 1000 ms so the bar moves between backend
     /// broadcasts (which are gated on status/title changes, not seek).
+    /// `tick()` projects from a monotonic anchor rather than accumulating a
+    /// fixed +1s per call (changed 2026-08-14 — the accumulator drifted with
+    /// no way to recover). Advancing therefore means advancing the clock.
+    /// Full coverage lives in `PlayerStoreSeekTests`.
     func testTickAdvancesSeekWhilePlaying() {
         let store = PlayerStore()
         var s = PlayerState.empty
@@ -99,13 +103,34 @@ final class PlayerStoreOptimisticTests: XCTestCase {
         s.title    = "Time"
         s.seek     = 5_000      // 5 s in ms
         s.duration = 100        // 100 s
+        store.receiveServerState(s)
+
+        let anchor = store.seekAnchor!
+        store.tick(now: anchor.advanced(by: .seconds(1)))
+        XCTAssertEqual(store.state.seek, 6_000, "tick must track one second of elapsed time")
+
+        store.tick(now: anchor.advanced(by: .seconds(2)))
+        XCTAssertEqual(store.state.seek, 7_000, "tick projects from the anchor, not the last value")
+    }
+
+    /// A `state` assigned directly, bypassing `receiveServerState`, leaves no
+    /// anchor. `tick()` must adopt the current position instead of freezing.
+    func testTickSelfHealsWhenAnchorMissing() {
+        let store = PlayerStore()
+        var s = PlayerState.empty
+        s.status   = .play
+        s.title    = "Time"
+        s.seek     = 5_000
+        s.duration = 100
         store.state = s
+        XCTAssertNil(store.seekAnchor)
 
         store.tick()
-        XCTAssertEqual(store.state.seek, 6_000, "tick must advance seek by 1 s while playing")
+        XCTAssertNotNil(store.seekAnchor, "tick must establish a missing anchor")
+        XCTAssertEqual(store.state.seek, 5_000, "adopting an anchor must not move the position")
 
-        store.tick()
-        XCTAssertEqual(store.state.seek, 7_000, "tick is idempotent at the per-second cadence")
+        store.tick(now: store.seekAnchor!.advanced(by: .seconds(3)))
+        XCTAssertEqual(store.state.seek, 8_000, "interpolation resumes from the adopted anchor")
     }
 
     /// `tick()` should be a no-op when paused / stopped (and when optimistic
@@ -132,12 +157,13 @@ final class PlayerStoreOptimisticTests: XCTestCase {
         s.title    = "Time"
         s.seek     = 99_500     // 99.5 s
         s.duration = 100        // 100 s
-        store.state = s
+        store.receiveServerState(s)
 
-        store.tick()
+        let anchor = store.seekAnchor!
+        store.tick(now: anchor.advanced(by: .seconds(1)))
         XCTAssertEqual(store.state.seek, 100_000, "tick clamps to duration")
 
-        store.tick()
+        store.tick(now: anchor.advanced(by: .seconds(30)))
         XCTAssertEqual(store.state.seek, 100_000, "tick stays clamped at duration")
     }
 }

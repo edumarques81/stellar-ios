@@ -53,6 +53,11 @@ final class PlayerStore {
     /// Apply server-truth state and clear any pending optimistic value.
     func receiveServerState(_ newState: PlayerState) {
         state = newState
+        // The server's position is authoritative: re-anchor unconditionally so
+        // a discontinuity it just reported (restarted track, scrub from the
+        // LCD) survives the next interpolation tick instead of being
+        // overwritten by the stale projection.
+        anchorSeek(newState.seek)
         optimisticStatus = nil
         optimisticTimeoutTask?.cancel()
         optimisticTimeoutTask = nil
@@ -66,28 +71,66 @@ final class PlayerStore {
         return nil
     }
 
-    /// Advance `state.seek` by one second while the server says `.play`.
-    /// The Stellar backend deliberately omits seek from its diff comparison
-    /// (see `stateCompareKeys` in `server.go`) — clients are expected to
-    /// interpolate locally between broadcasts. Mirrors `startSeekInterpolation`
-    /// in Volumio2-UI's `player.ts`.
-    func tick() {
-        guard state.status == .play else { return }
-        let durationMs = state.duration * 1000
-        guard durationMs > 0 else {
-            state.seek += 1_000
-            return
-        }
-        state.seek = min(state.seek + 1_000, durationMs)
+    /// Position (ms) last received from the server, and the monotonic instant
+    /// at which it was current. `tick()` projects forward from this anchor.
+    private(set) var seekAnchorMs: Int = 0
+    private(set) var seekAnchor: ContinuousClock.Instant?
+
+    /// Re-anchor the local seek clock on an authoritative position (ms).
+    func anchorSeek(_ milliseconds: Int, at instant: ContinuousClock.Instant = .now) {
+        seekAnchorMs = max(0, milliseconds)
+        seekAnchor = instant
     }
 
-    /// Start the 1 Hz seek interpolator. Safe to call multiple times — only
-    /// one task runs at a time. Stopped automatically on `deinit`.
+    /// Project `state.seek` forward from the anchor while the server says
+    /// `.play`.
+    ///
+    /// The Stellar backend does not broadcast a pushState per second — it
+    /// re-broadcasts when something meaningful changes, and (since 2026-08-14)
+    /// when the true position diverges from what clients are predicting. In
+    /// between, we dead-reckon.
+    ///
+    /// That reckoning is anchored on a monotonic instant rather than
+    /// accumulated `+1s` per tick. Accumulating absorbs every source of timer
+    /// error — `Task.sleep` slips past its deadline under load, and the hop to
+    /// the main actor costs more still — so the counter falls progressively
+    /// behind real playback with no way to notice. Mirrors
+    /// `startSeekInterpolation` in Volumio2-UI's `player.ts`.
+    func tick(now: ContinuousClock.Instant = .now) {
+        guard state.status == .play else { return }
+
+        // Self-heal: `state` assigned without going through
+        // receiveServerState leaves no anchor. Adopt the current position
+        // rather than freezing the clock until the next broadcast.
+        guard let anchor = seekAnchor else {
+            anchorSeek(state.seek, at: now)
+            return
+        }
+
+        let elapsedMs = Int(anchor.duration(to: now) / .milliseconds(1))
+        let projected = seekAnchorMs + max(0, elapsedMs)
+
+        let durationMs = state.duration * 1000
+        let bounded = durationMs > 0 ? min(projected, durationMs) : projected
+
+        // Quantise to whole seconds: the UI renders seconds, so publishing at
+        // sub-second resolution would drive @Observable re-renders four times
+        // a second for no visible gain.
+        let quantised = (bounded / 1_000) * 1_000
+        if state.seek != quantised {
+            state.seek = quantised
+        }
+    }
+
+    /// Start the seek interpolator. Sampled at 4 Hz so the displayed second
+    /// flips within 250ms of the true boundary, while `tick()` only publishes
+    /// when the whole second actually changes. Safe to call multiple times —
+    /// only one task runs at a time. Stopped automatically on `deinit`.
     func startSeekTicker() {
         guard seekTickerTask == nil else { return }
         seekTickerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
                 await MainActor.run { self?.tick() }
             }
@@ -113,8 +156,10 @@ final class PlayerStore {
             if self.state != newState {
                 self.receiveServerState(newState)
             } else {
-                // Identical payload — still clear optimistic so a missed
-                // server transition doesn't hang the button.
+                // Identical payload — still re-anchor (the server just
+                // confirmed this position is current) and clear optimistic so
+                // a missed server transition doesn't hang the button.
+                self.anchorSeek(newState.seek)
                 self.optimisticStatus = nil
                 self.optimisticTimeoutTask?.cancel()
             }
