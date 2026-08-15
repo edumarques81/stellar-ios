@@ -18,6 +18,7 @@ import SwiftUI
 /// Backend Server anchor and clears the binding.
 struct SettingsView: View {
     @Environment(LcdStore.self) private var lcd
+    @Environment(IngestStore.self) private var ingest
     @Binding var focusBackendOnAppear: Bool
 
     init(focusBackendOnAppear: Binding<Bool> = .constant(false)) {
@@ -34,6 +35,7 @@ struct SettingsView: View {
                         lcdToggleRow
                         ConnectionStatusRow()
                         DecodeErrorRow()
+                        IngestSection()
                         BackendServerSection()
                             .padding(.top, 8)
                         Spacer(minLength: 0)
@@ -64,7 +66,13 @@ struct SettingsView: View {
         // Load-bearing: forces a fresh `getLcdStatus` emit whenever the
         // Settings tab appears, so the toggle reconciles against the Pi
         // after backgrounding / tab switches.
-        .onAppear { lcd.refresh() }
+        // Same reasoning for the inbox: the status is a cheap directory
+        // listing, and it is the only thing that decides whether the ingest
+        // section shows at all.
+        .onAppear {
+            lcd.refresh()
+            ingest.requestStatus()
+        }
     }
 
     // iOS 18.3 SwiftUI `Toggle("", isOn: Binding(get:set:)).labelsHidden()`

@@ -15,6 +15,7 @@ struct StellarApp: App {
     @State private var albumTracksStore = AlbumTracksStore()
     @State private var lcdStore = LcdStore()
     @State private var lastPlayedStore = LastPlayedStore()
+    @State private var ingestStore = IngestStore()
 
     init() {
         // Configure the shared URLCache with a large disk-backed store before
@@ -45,6 +46,7 @@ struct StellarApp: App {
                 .environment(albumTracksStore)
                 .environment(lcdStore)
                 .environment(lastPlayedStore)
+                .environment(ingestStore)
                 .preferredColorScheme(.dark)
                 .onAppear {
                     playerStore.bind(to: socketService)
@@ -54,6 +56,7 @@ struct StellarApp: App {
                     albumTracksStore.bind(to: socketService)
                     lcdStore.bind(to: socketService)
                     lastPlayedStore.bind(to: socketService)
+                    ingestStore.bind(to: socketService)
                     socketService.connect()
                     // Kick off Bonjour browsing so the Settings picker has
                     // fresh candidates the moment the user navigates to it.
