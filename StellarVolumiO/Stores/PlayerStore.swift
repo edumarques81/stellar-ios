@@ -63,13 +63,13 @@ final class PlayerStore {
         optimisticTimeoutTask = nil
     }
 
-    var albumArtURL: URL? {
-        guard !state.albumart.isEmpty else { return nil }
-        if state.albumart.hasPrefix("http") {
-            return URL(string: state.albumart)
-        }
-        return nil
-    }
+    // Deliberately no `albumArtURL` here. The backend sends `albumart` as a
+    // host-relative `/albumart?path=…`, so resolving it needs the socket's
+    // current host:port — which the store does not know. The views that show
+    // art build the absolute URL themselves (`NowPlayingView.mpdAlbumArt`,
+    // `NowPlayingIdleView.artworkURL`, and the Library views). An
+    // `http`-prefix-only helper here looked usable and silently returned nil
+    // for every URL the backend actually sends.
 
     /// Position (ms) last received from the server, and the monotonic instant
     /// at which it was current. `tick()` projects forward from this anchor.
