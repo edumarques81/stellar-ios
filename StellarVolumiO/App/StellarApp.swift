@@ -14,6 +14,7 @@ struct StellarApp: App {
     @State private var artistStore = ArtistPickerStore()
     @State private var albumTracksStore = AlbumTracksStore()
     @State private var lcdStore = LcdStore()
+    @State private var lcdViewStore = LcdViewStore()
     @State private var lastPlayedStore = LastPlayedStore()
     @State private var ingestStore = IngestStore()
 
@@ -45,6 +46,7 @@ struct StellarApp: App {
                 .environment(artistStore)
                 .environment(albumTracksStore)
                 .environment(lcdStore)
+                .environment(lcdViewStore)
                 .environment(lastPlayedStore)
                 .environment(ingestStore)
                 .preferredColorScheme(.dark)
@@ -55,6 +57,7 @@ struct StellarApp: App {
                     artistStore.bind(to: socketService)
                     albumTracksStore.bind(to: socketService)
                     lcdStore.bind(to: socketService)
+                    lcdViewStore.bind(to: socketService)
                     lastPlayedStore.bind(to: socketService)
                     ingestStore.bind(to: socketService)
                     socketService.connect()

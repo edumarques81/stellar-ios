@@ -411,6 +411,22 @@ extension SocketService {
     func lcdStandby()  { emit("lcdStandby") }
     func getLcdStatus(){ emit("getLcdStatus") }
 
+    /// Ask which screen the LCD kiosk is showing. Reply: `pushLcdView`.
+    func getLcdView() { emit("getLcdView") }
+
+    /// Drive the LCD kiosk to a screen.
+    ///
+    /// `wake` additionally powers the panel on if it is in standby. It is opt-in
+    /// on the wire and defaults to false there, so we pass it explicitly: a view
+    /// change nobody can see is not what the user asked for.
+    ///
+    /// Sent as an object rather than a bare string — the bare-string form is
+    /// reserved for the kiosk reporting its own navigation, which carries no
+    /// wake intent. See docs/SOCKET-CONTRACT.md.
+    func lcdSetView(_ view: LcdView, wake: Bool) {
+        emitObject("lcdSetView", ["view": view.rawValue, "wake": wake])
+    }
+
     /// Request the track list for a specific album. `album` is required;
     /// `albumArtist` and `uri` are optional but recommended — `uri` scopes to a
     /// specific folder when the same album exists in multiple quality versions.

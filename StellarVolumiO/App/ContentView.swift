@@ -3,11 +3,14 @@ import SwiftUI
 struct ContentView: View {
     @Environment(SocketService.self) private var socket
     @Environment(LcdStore.self) private var lcd
+    @Environment(LcdViewStore.self) private var lcdView
 
     @State private var selectedTab: Tab = .player
     @State private var focusBackendInSettings = false
 
-    enum Tab { case player, library, lcd, settings }
+    /// `.lcd` and `.vu` are action-only — they are never actually selected.
+    /// See `tabSelection`.
+    enum Tab { case player, library, lcd, vu, settings }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -20,17 +23,30 @@ struct ContentView: View {
                     .tabItem { Label("Library", systemImage: "square.stack") }
                     .tag(Tab.library)
 
-                // Action-only tab: never actually selected (see `tabSelection`),
-                // it exists purely to render a tappable LCD switch in the tab
-                // bar. The content is inert.
+                // Action-only tabs: never actually selected (see
+                // `tabSelection`), they exist purely to render tappable
+                // switches in the tab bar. The content is inert.
+                //
+                // The two are independent, which is why they are two items:
+                // `.lcd` is whether the panel is lit, `.vu` is what is drawn
+                // on it. The panel can be dark while parked on the VU meter.
                 Color.clear
                     .tabItem {
                         Label(
-                            lcd.isOn ? "LCD On" : "LCD Off",
+                            "LCD",
                             systemImage: lcd.isOn ? "display" : "display.slash"
                         )
                     }
                     .tag(Tab.lcd)
+
+                Color.clear
+                    .tabItem {
+                        Label(
+                            "VU",
+                            systemImage: lcdView.isShowingVuMeter ? "waveform" : "waveform.slash"
+                        )
+                    }
+                    .tag(Tab.vu)
 
                 SettingsView(focusBackendOnAppear: $focusBackendInSettings)
                     .tabItem { Label("Settings", systemImage: "gear") }
@@ -53,26 +69,33 @@ struct ContentView: View {
         // Ask the backend for the current LCD power state on launch so the
         // tab-bar item doesn't sit on LcdStore's optimistic `true` default
         // before the first `pushLcdStatus` arrives.
-        .onAppear { lcd.refresh() }
+        .onAppear {
+            lcd.refresh()
+            lcdView.refresh()
+        }
     }
 
     // MARK: - Tab selection
 
-    /// Proxy binding that turns the `.lcd` tab into a button.
+    /// Proxy binding that turns `.lcd` and `.vu` into buttons.
     ///
-    /// SwiftUI writes the tapped tag through this binding's setter. For `.lcd`
-    /// we perform the toggle and deliberately *don't* update `selectedTab`, so
-    /// the getter still returns the previous tab and TabView snaps straight
-    /// back — the user stays where they were and the LCD flips in place.
+    /// SwiftUI writes the tapped tag through this binding's setter. For the
+    /// action tags we perform the toggle and deliberately *don't* update
+    /// `selectedTab`, so the getter still returns the previous tab and TabView
+    /// snaps straight back — the user stays where they were and the panel
+    /// changes in place.
     private var tabSelection: Binding<Tab> {
         Binding(
             get: { selectedTab },
             set: { newValue in
-                guard newValue != .lcd else {
+                switch newValue {
+                case .lcd:
                     lcd.setOn(!lcd.isOn)
-                    return
+                case .vu:
+                    lcdView.toggleVuMeter()
+                default:
+                    selectedTab = newValue
                 }
-                selectedTab = newValue
             }
         )
     }
