@@ -2,15 +2,16 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(SocketService.self) private var socket
+    @Environment(LcdStore.self) private var lcd
 
     @State private var selectedTab: Tab = .player
     @State private var focusBackendInSettings = false
 
-    enum Tab { case player, library, settings }
+    enum Tab { case player, library, lcd, settings }
 
     var body: some View {
         ZStack(alignment: .top) {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 NowPlayingView()
                     .tabItem { Label("Now Playing", systemImage: "music.note") }
                     .tag(Tab.player)
@@ -18,6 +19,18 @@ struct ContentView: View {
                 LibraryView()
                     .tabItem { Label("Library", systemImage: "square.stack") }
                     .tag(Tab.library)
+
+                // Action-only tab: never actually selected (see `tabSelection`),
+                // it exists purely to render a tappable LCD switch in the tab
+                // bar. The content is inert.
+                Color.clear
+                    .tabItem {
+                        Label(
+                            lcd.isOn ? "LCD On" : "LCD Off",
+                            systemImage: lcd.isOn ? "display" : "display.slash"
+                        )
+                    }
+                    .tag(Tab.lcd)
 
                 SettingsView(focusBackendOnAppear: $focusBackendInSettings)
                     .tabItem { Label("Settings", systemImage: "gear") }
@@ -37,6 +50,31 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: shouldShowFailureBanner)
+        // Ask the backend for the current LCD power state on launch so the
+        // tab-bar item doesn't sit on LcdStore's optimistic `true` default
+        // before the first `pushLcdStatus` arrives.
+        .onAppear { lcd.refresh() }
+    }
+
+    // MARK: - Tab selection
+
+    /// Proxy binding that turns the `.lcd` tab into a button.
+    ///
+    /// SwiftUI writes the tapped tag through this binding's setter. For `.lcd`
+    /// we perform the toggle and deliberately *don't* update `selectedTab`, so
+    /// the getter still returns the previous tab and TabView snaps straight
+    /// back — the user stays where they were and the LCD flips in place.
+    private var tabSelection: Binding<Tab> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                guard newValue != .lcd else {
+                    lcd.setOn(!lcd.isOn)
+                    return
+                }
+                selectedTab = newValue
+            }
+        )
     }
 
     // MARK: - Failure banner
