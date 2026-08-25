@@ -85,7 +85,24 @@ final class SocketService {
 
     private var manager: SocketManager?
     private var socket: SocketIOClient?
-    private var eventHandlers: [String: [(Any) -> Void]] = [:]
+    /// Every store subscription registered through `on…`, in registration
+    /// order, kept so it can be re-attached whenever the underlying socket is
+    /// rebuilt. Before this existed the handlers lived only on the
+    /// SocketIOClient instance, so an endpoint change silently discarded them:
+    /// the app reconnected, reported itself connected, and received nothing.
+    private var subscriptions: [(event: String, callback: (Any) -> Void)] = []
+
+    /// Event names currently subscribed on the underlying socket. Read-only
+    /// introspection used by the handler-survival regression test and usable as
+    /// a Settings diagnostic — a live socket with an empty list means the app is
+    /// connected but deaf.
+    var subscribedEvents: [String] { socket?.handlers.map(\.event) ?? [] }
+
+    /// True when `event` has at least one handler attached to the live socket.
+    func hasSubscription(for event: String) -> Bool {
+        subscribedEvents.contains(event)
+    }
+
 
     var isConnected: Bool { connectionState == .connected }
 
@@ -120,7 +137,8 @@ final class SocketService {
             socket?.disconnect()
             socket = nil
             manager = nil
-            eventHandlers.removeAll()
+            // `subscriptions` deliberately survives: the whole point is to
+            // replay them onto the socket we are about to build.
         }
         guard socket == nil else { return }
 
@@ -158,6 +176,14 @@ final class SocketService {
 
         socket = manager?.defaultSocket
         setupHandlers()
+        // Re-attach every subscription registered against the previous socket.
+        // Without this an endpoint change leaves the app connected but deaf —
+        // and because `seek` is the only field that changes within a track, the
+        // visible symptom is a frozen progress bar rather than an obvious
+        // disconnect. Covered by SocketHandlerSurvivalTests.
+        for sub in subscriptions {
+            attach(sub.event, sub.callback)
+        }
     }
 
     /// Connect to the backend. The optional host/port arguments stay for
@@ -185,7 +211,6 @@ final class SocketService {
         socket?.disconnect()
         socket = nil
         manager = nil
-        eventHandlers.removeAll()
         connectionState = .connecting
         ensureInitialised()
         socket?.connect()
@@ -249,6 +274,20 @@ final class SocketService {
         }
     }
 
+    // MARK: - Subscription registry
+
+    /// Attach a payload callback to the *current* socket without recording it.
+    /// Used both by `register` and by the replay loop in `ensureInitialised`.
+    private func attach(_ event: String, _ callback: @escaping (Any) -> Void) {
+        socket?.on(event) { data, _ in callback(data) }
+    }
+
+    /// Record a subscription so it survives a socket rebuild, then attach it.
+    private func register(_ event: String, _ callback: @escaping (Any) -> Void) {
+        subscriptions.append((event: event, callback: callback))
+        attach(event, callback)
+    }
+
     // MARK: - Subscribe
     func on<T: Decodable>(_ event: String, handler: @escaping (T) -> Void) {
         ensureInitialised()
@@ -267,8 +306,7 @@ final class SocketService {
                 }
             }
         }
-        eventHandlers[event, default: []].append(wrapper)
-        socket?.on(event, callback: { data, _ in wrapper(data) })
+        register(event, wrapper)
     }
 
     /// Subscribe to a Socket.IO event where the wire payload is a
@@ -276,7 +314,7 @@ final class SocketService {
     /// tolerant parser; on `nil` we populate `lastDecodeError`.
     func onRawDict<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T) -> Void) {
         ensureInitialised()
-        socket?.on(event) { [weak self] data, _ in
+        register(event) { [weak self] data in
             guard let arr = data as? [Any], let first = arr.first else {
                 DispatchQueue.main.async { self?.lastDecodeError = "\(event): empty payload" }
                 return
@@ -300,7 +338,7 @@ final class SocketService {
     /// pushLastPlayedAlbum on a fresh backend) — passes `nil` to the handler.
     func onRawDictNullable<T>(_ event: String, parser: @escaping ([String: Any]) -> T?, handler: @escaping (T?) -> Void) {
         ensureInitialised()
-        socket?.on(event) { [weak self] data, _ in
+        register(event) { [weak self] data in
             let first = (data as? [Any])?.first
             if first is NSNull || first == nil {
                 DispatchQueue.main.async {
@@ -326,7 +364,7 @@ final class SocketService {
 
     func on(_ event: String, handler: @escaping () -> Void) {
         ensureInitialised()
-        socket?.on(event) { _, _ in
+        register(event) { _ in
             DispatchQueue.main.async { handler() }
         }
     }
@@ -334,8 +372,8 @@ final class SocketService {
     /// Subscribe with raw `[Any]` payload — use when the wire shape isn't a flat Decodable.
     func onRaw(_ event: String, handler: @escaping ([Any]) -> Void) {
         ensureInitialised()
-        socket?.on(event) { data, _ in
-            DispatchQueue.main.async { handler(data) }
+        register(event) { data in
+            DispatchQueue.main.async { handler(data as? [Any] ?? []) }
         }
     }
 
