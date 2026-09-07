@@ -79,11 +79,11 @@ final class AirplayStore {
     /// one task runs at a time. Stopped automatically on `deinit`.
     func startSeekTicker() {
         guard seekTickerTask == nil else { return }
-        seekTickerTask = Task { [weak self] in
+        seekTickerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if Task.isCancelled { return }
-                await MainActor.run { self?.tick() }
+                self?.tick()
             }
         }
     }

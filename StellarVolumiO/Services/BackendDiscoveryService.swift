@@ -32,8 +32,15 @@ struct DiscoveredServer: Identifiable, Equatable, Hashable {
 /// a private serial dispatch queue. Final mutations of the observable
 /// `discoveredServers` / `isBrowsing` are hopped to the main actor so SwiftUI
 /// observers see them on the main run loop.
+///
+/// The `@unchecked Sendable` conformance is that threading contract stated to
+/// the compiler: every stored property is either `@MainActor`-isolated or only
+/// touched inside a `browserQueue.async` block, and `NWBrowser`/`NWConnection`
+/// are themselves thread-safe. Without it, hopping onto `browserQueue` warns
+/// about capturing a non-Sendable `self`. Anything added here must keep to one
+/// of those two isolation domains.
 @Observable
-final class BackendDiscoveryService {
+final class BackendDiscoveryService: @unchecked Sendable {
 
     // MARK: - Public state (read on the main actor)
 

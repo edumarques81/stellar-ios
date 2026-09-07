@@ -43,10 +43,15 @@ final class PlayerStore {
     func applyOptimistic(_ status: PlaybackStatus) {
         optimisticStatus = status
         optimisticTimeoutTask?.cancel()
-        optimisticTimeoutTask = Task { [weak self] in
+        // `@MainActor` on the task body rather than an inner `MainActor.run`:
+        // the hop happens once, at the top, and `self` is then read directly
+        // instead of being captured again by a nested `@Sendable` closure —
+        // which is what "reference to captured var 'self' in concurrently-
+        // executing code" (an error in Swift 6) was complaining about.
+        optimisticTimeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else { return }
-            await MainActor.run { self?.optimisticStatus = nil }
+            self?.optimisticStatus = nil
         }
     }
 
@@ -148,11 +153,11 @@ final class PlayerStore {
     /// only one task runs at a time. Stopped automatically on `deinit`.
     func startSeekTicker() {
         guard seekTickerTask == nil else { return }
-        seekTickerTask = Task { [weak self] in
+        seekTickerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
-                await MainActor.run { self?.tick() }
+                self?.tick()
             }
         }
     }
