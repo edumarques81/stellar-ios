@@ -101,7 +101,10 @@ struct NowPlayingView: View {
                 socket.playPause()
             },
             onNext:      { socket.next() },
-            onSeek:      { socket.seek(to: $0) }
+            onSeek:      { seconds in
+                player.applyOptimisticSeek(seconds * 1_000)
+                socket.seek(to: seconds)
+            }
         )
     }
 

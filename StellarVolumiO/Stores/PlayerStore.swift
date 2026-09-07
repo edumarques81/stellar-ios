@@ -50,6 +50,26 @@ final class PlayerStore {
         }
     }
 
+    /// Move the local seek clock to a position the user just scrubbed to,
+    /// before the server has confirmed it.
+    ///
+    /// Without this the thumb visibly snaps back. `SeekBar` shows `dragValue`
+    /// only while the drag is in progress; the moment the finger lifts it
+    /// reverts to `state.seek`, which is still the pre-drag position until a
+    /// `pushState` lands. Both the position and the anchor have to move —
+    /// setting the anchor alone leaves `state.seek` stale, because `tick()`
+    /// returns early unless the server says `.play`, so a scrub while paused
+    /// would not update at all.
+    ///
+    /// This is optimistic, not authoritative: the next `receiveServerState`
+    /// re-anchors unconditionally and wins, which is what corrects a seek the
+    /// backend clamped or refused.
+    func applyOptimisticSeek(_ milliseconds: Int) {
+        let clamped = max(0, milliseconds)
+        state.seek = clamped
+        anchorSeek(clamped)
+    }
+
     /// Apply server-truth state and clear any pending optimistic value.
     func receiveServerState(_ newState: PlayerState) {
         state = newState

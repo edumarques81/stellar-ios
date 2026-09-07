@@ -106,3 +106,72 @@ final class PlayerStoreSeekTests: XCTestCase {
         XCTAssertEqual(store.state.seek, 11_000)
     }
 }
+
+/// Coverage for the optimistic scrub path.
+///
+/// The regression these exist for: releasing the scrubber made the thumb jump
+/// back to where the track had been, because `SeekBar` only shows the dragged
+/// value while the finger is down and `state.seek` was not updated until the
+/// server replied. Combined with the emit bug that dropped the seek entirely,
+/// the thumb snapped back and stayed there — "nothing changed on the music".
+@MainActor
+final class PlayerStoreOptimisticSeekTests: XCTestCase {
+
+    func testScrubMovesThePositionImmediately() {
+        let store = PlayerStore()
+        store.state.status = .play
+        store.state.seek = 41_000
+
+        store.applyOptimisticSeek(150_000)
+
+        XCTAssertEqual(store.state.seek, 150_000,
+                       "the scrubbed position must be visible before the server confirms")
+        XCTAssertEqual(store.seekAnchorMs, 150_000,
+                       "the interpolator must project forward from the new position")
+    }
+
+    func testScrubWhilePausedStillMovesThePosition() {
+        // tick() returns early unless the server says .play, so anchoring
+        // alone would leave a paused scrub with no visible effect at all.
+        let store = PlayerStore()
+        store.state.status = .pause
+        store.state.seek = 41_000
+
+        store.applyOptimisticSeek(10_000)
+
+        XCTAssertEqual(store.state.seek, 10_000)
+    }
+
+    func testScrubToStartIsNotTreatedAsNoPosition() {
+        let store = PlayerStore()
+        store.state.status = .play
+        store.state.seek = 41_000
+
+        store.applyOptimisticSeek(0)
+
+        XCTAssertEqual(store.state.seek, 0)
+        XCTAssertEqual(store.seekAnchorMs, 0)
+    }
+
+    func testNegativePositionIsClampedToZero() {
+        let store = PlayerStore()
+        store.applyOptimisticSeek(-5_000)
+
+        XCTAssertEqual(store.state.seek, 0)
+        XCTAssertEqual(store.seekAnchorMs, 0)
+    }
+
+    func testServerStateOverridesAnOptimisticScrub() {
+        let store = PlayerStore()
+        store.state.status = .play
+        store.applyOptimisticSeek(150_000)
+
+        var authoritative = store.state
+        authoritative.seek = 3_000
+        store.receiveServerState(authoritative)
+
+        XCTAssertEqual(store.state.seek, 3_000,
+                       "server truth must win over the optimistic value")
+        XCTAssertEqual(store.seekAnchorMs, 3_000)
+    }
+}

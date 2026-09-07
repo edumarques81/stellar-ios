@@ -263,15 +263,29 @@ final class SocketService {
     }
 
     // MARK: - Emit
-    func emit(_ event: String, data: [Any] = []) {
+
+    /// Emit `event` with each element of `data` as its own argument.
+    ///
+    /// `data` is `[SocketData]`, not `[Any]`, and it goes out through
+    /// `emit(_:with:)` rather than the variadic `emit(_:_:)`. That is
+    /// load-bearing: `Array` itself conforms to `SocketData`, so passing an
+    /// array into the variadic form compiles happily and sends the whole array
+    /// as a *single* argument. `seek(to: 150)` went on the wire as `[[150]]`
+    /// instead of `[150]`, and the backend's `args[0].(float64)` type assert
+    /// failed and did nothing — no error client-side, no error server-side,
+    /// the control just silently did not work. `emit(_:with:)` splats.
+    func emit(_ event: String, data: [SocketData] = []) {
         ensureInitialised()
         // Note: emits while disconnected are buffered by SocketIO-Client-Swift
         // and flushed on reconnect. Do not pre-guard — the library handles it.
         if data.isEmpty {
             socket?.emit(event)
         } else {
-            socket?.emit(event, data)
+            socket?.emit(event, with: data, completion: nil)
         }
+        #if DEBUG
+        _recordEmitted(event: event, data: data)
+        #endif
     }
 
     // MARK: - Subscription registry
@@ -578,6 +592,37 @@ extension SocketService {
 
     func resetEmittedObjectCapture() {
         Self.captureStorage.removeValue(forKey: ObjectIdentifier(self))
+    }
+}
+
+/// Test-only capture of the last `emit(_:data:)` call, recording the argument
+/// list as it will be splatted onto the wire. This exists because the bug it
+/// guards against was invisible from both ends: the app emitted, the backend
+/// received an event, and the payload was simply the wrong shape.
+extension SocketService {
+    private static var argCaptureStorage: [ObjectIdentifier: (event: String, data: [SocketData])] = [:]
+
+    var lastEmittedEvent: String? {
+        Self.argCaptureStorage[ObjectIdentifier(self)]?.event
+    }
+
+    var lastEmittedData: [SocketData]? {
+        Self.argCaptureStorage[ObjectIdentifier(self)]?.data
+    }
+
+    /// The first argument as the backend will see it, or nil if none was sent.
+    /// A wrapped array shows up here as `[Int]` rather than `Int`, which is
+    /// exactly the distinction the seek regression turned on.
+    var lastEmittedFirstArgument: Any? {
+        Self.argCaptureStorage[ObjectIdentifier(self)]?.data.first
+    }
+
+    func _recordEmitted(event: String, data: [SocketData]) {
+        Self.argCaptureStorage[ObjectIdentifier(self)] = (event: event, data: data)
+    }
+
+    func resetEmittedCapture() {
+        Self.argCaptureStorage.removeValue(forKey: ObjectIdentifier(self))
     }
 }
 #endif
