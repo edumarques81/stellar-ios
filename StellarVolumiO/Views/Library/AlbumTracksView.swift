@@ -32,6 +32,7 @@ struct AlbumTracksView: View {
 
                     VStack(spacing: 4) {
                         Text(album.title.isEmpty ? "—" : album.title)
+                            .accessibilityIdentifier("album-tracks-title")
                             .font(StellarFont.titleLarge)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
@@ -120,16 +121,24 @@ private struct AlbumCoverHero: View {
     let port: Int
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.stellarIdiom) private var idiom
 
-    /// 240 is the size the iPhone shipped with and the size a Slide Over pane
-    /// still needs. A regular-width canvas gets a larger cover; it is a step
-    /// rather than a ratio because the surrounding track list is a fixed-width
-    /// reading column, not a grid, so there is nothing for a continuous scale
-    /// to stay in proportion with.
+    /// `heroSideCompact` is the size the iPhone shipped with and the size a
+    /// Slide Over pane still needs. A roomy canvas gets a larger cover; it is a
+    /// step rather than a ratio because the surrounding track list is a
+    /// fixed-width reading column, not a grid, so there is nothing for a
+    /// continuous scale to stay in proportion with.
+    ///
+    /// It is a *ceiling*, applied with `maxWidth` plus a 1:1 aspect ratio
+    /// rather than a fixed `width`. The step assumes the detail column is at
+    /// least as wide as the step, and that assumption does not hold: the
+    /// regular threshold is around 590 pt of window, and the sidebar takes
+    /// ~320 pt of it, so a narrow Stage Manager window can leave under 280 pt
+    /// of detail. A fixed frame would clip there; a ceiling shrinks.
     private var side: CGFloat {
-        horizontalSizeClass == .regular
+        RootLayoutMode.isRoomy(horizontalSizeClass: horizontalSizeClass, idiom: idiom)
             ? Stellar.Metric.heroSideRegular
-            : 240
+            : Stellar.Metric.heroSideCompact
     }
 
     var body: some View {
@@ -144,7 +153,8 @@ private struct AlbumCoverHero: View {
                 placeholder
             }
         }
-        .frame(width: side, height: side)
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: side, maxHeight: side)
         .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
         .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
                 radius: Stellar.Shadow.albumArt.radius,

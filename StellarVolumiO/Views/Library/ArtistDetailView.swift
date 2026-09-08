@@ -84,6 +84,7 @@ struct ArtistDetailView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("artist-album-grid")
     }
 
     // Same replaceAndPlay shape as AlbumTracksView.playTrack — a per-track

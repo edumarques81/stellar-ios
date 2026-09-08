@@ -34,4 +34,17 @@ enum RootLayoutMode: Equatable, CaseIterable, Sendable {
         guard idiom == .pad else { return .tabs }
         return horizontalSizeClass == .compact ? .tabs : .sidebar
     }
+
+    /// True when the canvas is the roomy one — an iPad at regular width.
+    ///
+    /// Layout steps (a wider reading column, a larger cover, a bigger gradient
+    /// radius) must ask *this*, not `horizontalSizeClass == .regular` on its
+    /// own. The size class alone is true for an iPhone Max held in landscape,
+    /// and REG-01 is that the phone gets the layout it shipped with — the
+    /// `idiom == .pad` guard in `resolve` is what enforces that, so every
+    /// consumer has to go through it.
+    static func isRoomy(horizontalSizeClass: UserInterfaceSizeClass?,
+                        idiom: UIUserInterfaceIdiom) -> Bool {
+        resolve(horizontalSizeClass: horizontalSizeClass, idiom: idiom) == .sidebar
+    }
 }

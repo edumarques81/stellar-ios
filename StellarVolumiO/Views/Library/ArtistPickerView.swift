@@ -31,6 +31,9 @@ struct ArtistPickerView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        // Named for the parity sweep: on iPad the sidebar is also a
+        // collection view, so an index-based lookup finds it first.
+        .accessibilityIdentifier("artist-list")
         .navigationDestination(for: LibraryArtist.self) { artist in
             ArtistDetailView(artist: artist)
         }

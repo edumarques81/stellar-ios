@@ -2,7 +2,7 @@
 
 **Updated:** 2026-09-09
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 5 — code review outstanding
+**Current phase:** Phase 6 — blocked on the physical iPad
 
 ## Progress
 
@@ -13,7 +13,7 @@
 | 2 — Layout-decision type (TDD) | ✅ complete |
 | 3 — NavigationSplitView sidebar | ✅ complete |
 | 4 — iPad-size layout adaptation | ✅ complete |
-| 5 — Parity sweep + full regression + code review | 🟨 sweep + regression done; code review outstanding |
+| 5 — Parity sweep + full regression + code review | ✅ complete |
 | 6 — Physical iPad | ⬜ blocked on hardware (expected 2026-09-10) |
 
 ## Done so far
@@ -121,12 +121,51 @@
   still exist in `SocketService` and still have zero call sites outside it.
 - **227 tests green on all three sims**, and the simulator build emits no Swift
   warnings.
-- **Known verification gap:** System Events has no accessibility access to
-  Simulator on this Mac — it cannot read its windows, so neither rotation nor
-  taps can be scripted. Landscape is verified via the built Info.plist and the
-  render tests; sidebar sections were screenshotted by temporarily changing the
-  default section and reverting. Real rotation and touch testing happen on the
-  physical iPad in Phase 6.
+- **Phase 5 code review answered — 28 fixed, 1 rejected, 1 deferred.** Report at
+  `.planning/phases/phase-5/REVIEW.md` (30 findings), response at
+  `.planning/phases/phase-5/REVIEW-RESPONSE.md`. The blockers were all real
+  except CR-04: the glassy background really did restyle every iPhone that is
+  not exactly 393 pt wide, and retained detail sections really never re-fired
+  `onAppear`, which silently disables the ingest section for a whole session.
+- **CR-04 rejected on evidence.** It claimed `app.buttons["pause.fill"]` cannot
+  resolve because `PlayPauseButton` overrides the accessibility *label*.
+  `XCUIElementQuery`'s subscript matches `identifier` first, and the live
+  hierarchy dump reads `Button, identifier: 'pause.fill', label: 'Pause'` — the
+  sweep had already run green twice on two simulators.
+- **WR-08 measured instead of rebuilt.** The predicted double navigation bar from
+  nesting `LibraryView`'s `NavigationStack` in the detail column does not happen
+  on iOS 26.3: two bars exist in the window, one per column, and
+  `.navigationTitle` lands on the detail bar. `test06` now pins
+  `app.navigationBars.count == 2` so a future regression fails loudly.
+- **Deferred, deliberately (WR-05 part 2).** A shell swap destroys `LibraryView`'s
+  segment and navigation path — `switch layoutMode` is a `_ConditionalContent`
+  branch. NAV-07 as delivered preserves the *section*, not the state within it.
+  The fix is architectural and would change iPhone behaviour, so it is a
+  post-merge candidate rather than an in-port change.
+- **`\.stellarIdiom` is the reason the iPad branch is tested at all.**
+  `scripts/test.sh` runs an iPhone simulator and `RootLayoutMode` refuses a
+  sidebar to anything but an iPad, so before this the entire sidebar path
+  executed zero times in the default run. Tests inject the idiom; production
+  never sets it.
+- **The sweep is now iPad-guarded and its destructive test is opt-in.** On an
+  iPhone simulator `app.buttons["LCD"]` matches the LCD *tab item* and would
+  have toggled the physical panel while asserting nothing — all 8 now skip
+  there. `test05` needs `TEST_RUNNER_STELLAR_SWEEP_DESTRUCTIVE=1`; note the
+  prefix, `xcodebuild` forwards only `TEST_RUNNER_`-prefixed variables to the
+  UI-test runner and strips it. Restores moved into `addTeardownBlock`, because
+  `continueAfterFailure = false` means a failure aborts the method and an
+  inline restore never runs.
+- **233 tests green on all three sims**; parity sweep green on the iPad Pro 11"
+  (7 + 1 skipped), and `test05` run once deliberately with the Pi's queue
+  captured and restored exactly.
+- **Known verification gap (Phases 3-4 only — superseded in Phase 5).** System
+  Events reports zero windows for the Simulator process on this Mac, so nothing
+  could be tapped *that way*, and Phases 3 and 4 worked around it by
+  screenshotting with the default section temporarily changed. The conclusion
+  drawn at the time — that the simulator could not be driven at all — was wrong:
+  XCUITest drives the app through its own accessibility hierarchy and never
+  touches the window server. See the Phase 5 notes above. Split View and Stage
+  Manager remain undriveable and are still Phase 6.
 
 ## Environment
 
@@ -141,6 +180,18 @@ Xcode 26.3 (17C529). Backend at `stellar.local:3000`.
 ## Open questions
 
 - None blocking. Phase 6 needs the physical iPad.
+
+## Post-merge follow-up list (not port scope)
+
+- WR-05(2): hoist `LibraryView`'s segment + navigation path so sub-state survives
+  a shell swap.
+- WR-12: `NowPlayingDisplayState.from(airplay:)` maps an empty sender to `""`
+  rather than nil, so `from(airplay: .empty).isAirplay` is true. Latent — the
+  caller gates on `isActive`. Pinned by a named test.
+- IN-06: `Retry` and `Server Settings` in the connection-failure banner are
+  28.6 pt tall, below the project's 44 pt convention. Predates this branch.
+- `AlbumPickerStore` should retry `load()` on socket connect — the pre-existing
+  empty-library-at-launch bug, reproducible on iPhone too.
 
 ## Notes for the next session
 

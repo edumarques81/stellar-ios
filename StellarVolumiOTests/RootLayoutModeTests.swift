@@ -111,4 +111,33 @@ final class RootLayoutModeTests: XCTestCase {
     func testTheDecisionIsTotal() {
         XCTAssertEqual(Set(RootLayoutMode.allCases), [.tabs, .sidebar])
     }
+
+    // MARK: - isRoomy
+
+    /// `isRoomy` is what every *layout* step asks (gradient radius, cover size,
+    /// vertical centring). It must agree with the shell decision on every
+    /// input — if the two ever disagree, the app would grow a sidebar while
+    /// laying out for a phone, or the reverse.
+    func testIsRoomyAgreesWithResolveOnEveryInput() {
+        let idioms: [UIUserInterfaceIdiom] = [.unspecified, .phone, .pad, .tv, .carPlay, .mac, .vision]
+        for idiom in idioms {
+            for sizeClass: UserInterfaceSizeClass? in [.compact, .regular, nil] {
+                XCTAssertEqual(
+                    RootLayoutMode.isRoomy(horizontalSizeClass: sizeClass, idiom: idiom),
+                    RootLayoutMode.resolve(horizontalSizeClass: sizeClass, idiom: idiom) == .sidebar,
+                    "idiom \(idiom.rawValue) with size class \(String(describing: sizeClass))"
+                )
+            }
+        }
+    }
+
+    /// The specific case that makes `isRoomy` worth having: an iPhone Max in
+    /// landscape reports *regular* width. A layout step keyed off the size
+    /// class alone would silently restyle the phone (REG-01).
+    func testRegularWidthIPhoneIsNotRoomy() {
+        XCTAssertFalse(RootLayoutMode.isRoomy(horizontalSizeClass: .regular, idiom: .phone))
+        XCTAssertTrue(RootLayoutMode.isRoomy(horizontalSizeClass: .regular, idiom: .pad))
+        XCTAssertFalse(RootLayoutMode.isRoomy(horizontalSizeClass: .compact, idiom: .pad),
+                       "a Slide Over pane is an iPad, but it is not roomy")
+    }
 }

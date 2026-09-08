@@ -48,9 +48,13 @@ enum Stellar {
         /// title to the full width of a 13" detail pane, where a 1000 pt album
         /// cover would push the transport controls off the first screenful.
         static let contentMaxWidth: CGFloat = 560
-        /// Album-cover hero side on a regular-width canvas. The compact value
-        /// (240) is what the iPhone has always used and is left alone.
+        /// Album-cover hero side on a roomy canvas. It is a ceiling, not a
+        /// fixed size — see `AlbumCoverHero`, which lets the cover shrink below
+        /// it when the detail column is narrower than the step assumes.
         static let heroSideRegular: CGFloat = 320
+        /// Album-cover hero side everywhere else. This is what the iPhone
+        /// shipped with; REG-01 means it does not move.
+        static let heroSideCompact: CGFloat = 240
     }
 
     enum Shadow {
@@ -64,17 +68,27 @@ enum Stellar {
 // of the deep base mimic PlayerLayout.svelte's radial-gradient sheen.
 
 struct StellarGlassyBackground: View {
-    /// The radii used to be a flat 280 pt, which reads as a soft sheen on a
-    /// 393 pt iPhone and as two small smudges in the corner of a 1366 pt iPad.
-    /// Scaling off the canvas's *shorter* side keeps the sheen the same
-    /// proportion of the screen in either orientation, and the 0.71 factor is
-    /// chosen so a 393 pt-wide iPhone still lands on ~280 — the phone is
-    /// deliberately unchanged.
+    /// The radii are a flat 280 pt on a phone — the value this shipped with,
+    /// and the value REG-01 pins. On a roomy canvas that reads as two small
+    /// smudges in the corner of a 1366 pt panel, so there, and only there, the
+    /// radius scales off the canvas's shorter side.
+    ///
+    /// The first version of this scaled *unconditionally* and justified it with
+    /// "a 393 pt iPhone still lands on ~280". That is true of exactly one
+    /// phone: an SE or a 13 mini (375 pt) would have got 266 and a 16 Pro Max
+    /// (440 pt) 312. Both ship against this deployment target, so the gradient
+    /// would have moved on real phones. Hence the branch.
+    private static let compactRadius: CGFloat = 280
     private static let radiusFactor: CGFloat = 0.71
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.stellarIdiom) private var idiom
 
     var body: some View {
         GeometryReader { geo in
-            let radius = min(geo.size.width, geo.size.height) * Self.radiusFactor
+            let radius = isRoomy
+                ? min(geo.size.width, geo.size.height) * Self.radiusFactor
+                : Self.compactRadius
 
             ZStack {
                 Stellar.Color.baseBackground
@@ -95,5 +109,9 @@ struct StellarGlassyBackground: View {
             }
         }
         .ignoresSafeArea()
+    }
+
+    private var isRoomy: Bool {
+        RootLayoutMode.isRoomy(horizontalSizeClass: horizontalSizeClass, idiom: idiom)
     }
 }

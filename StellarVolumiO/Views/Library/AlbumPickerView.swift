@@ -24,6 +24,10 @@ struct AlbumPickerView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
+        // Named so the parity sweep can scope to this grid instead of
+        // guessing a scroll-view index — on iPad the sidebar is a scroll
+        // view too, and index-based lookups silently pick it up.
+        .accessibilityIdentifier("album-grid")
         .onAppear {
             if store.albums.isEmpty && !store.loading { store.load() }
         }

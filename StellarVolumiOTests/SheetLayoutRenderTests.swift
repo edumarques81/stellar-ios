@@ -12,70 +12,43 @@ import SwiftUI
 /// would strand content inside the card with no visible failure on the phone.
 ///
 /// These host each sheet's *content* at the canvases the system actually uses
-/// and force a layout pass. A sheet that cannot compose, or that refuses to
-/// take the width it is given, fails here.
+/// and assert on the rendered hierarchy: nothing may sit outside the card.
 @MainActor
 final class SheetLayoutRenderTests: XCTestCase {
 
     /// Canvases a sheet is handed. The phone gets the whole screen; the iPad
     /// gets a form sheet, and a Slide Over pane shrinks that further.
-    private static let canvases: [(name: String, size: CGSize)] = [
-        ("iPhone full screen",     CGSize(width: 393, height: 852)),
-        ("iPad form sheet",        CGSize(width: 540, height: 620)),
-        ("iPad form sheet, wide",  CGSize(width: 704, height: 820)),
-        ("Slide Over sheet",       CGSize(width: 320, height: 700)),
+    private static let canvases: [(name: String, sizeClass: UIUserInterfaceSizeClass,
+                                   idiom: UIUserInterfaceIdiom, size: CGSize)] = [
+        ("iPhone full screen",    .compact, .phone, CGSize(width: 393, height: 852)),
+        ("iPad form sheet",       .regular, .pad,   CGSize(width: 540, height: 620)),
+        ("iPad form sheet, wide", .regular, .pad,   CGSize(width: 704, height: 820)),
+        ("Slide Over sheet",      .compact, .pad,   CGSize(width: 320, height: 700)),
     ]
-
-    /// The environment graph both sheets read from. The `SocketService` is
-    /// returned alongside because the stores hold it weakly — dropping it would
-    /// leave every binding dead before layout runs.
-    private func makeEnvironment() -> (config: BackendConfigStore,
-                                       socket: SocketService,
-                                       discovery: BackendDiscoveryService,
-                                       ingest: IngestStore) {
-        let config = BackendConfigStore()
-        return (config,
-                SocketService(config: config),
-                BackendDiscoveryService(),
-                IngestStore())
-    }
-
-    private func render(_ view: some View, at size: CGSize) -> UIHostingController<AnyView> {
-        let host = UIHostingController(rootView: AnyView(view))
-        host.view.frame = CGRect(origin: .zero, size: size)
-        host.view.layoutIfNeeded()
-        return host
-    }
 
     func testBackendDiscoverySheetComposesAtEveryPresentationSize() {
         for canvas in Self.canvases {
-            let env = makeEnvironment()
-            let sheet = BackendDiscoverySheet(onSelected: {})
-                .environment(env.discovery)
-                .environment(env.config)
+            let env = StellarTestEnvironment()
+            let host = LayoutHosting.host(
+                env.inject(into: BackendDiscoverySheet(onSelected: {}), idiom: canvas.idiom),
+                size: canvas.size,
+                sizeClass: canvas.sizeClass)
 
-            let host = render(sheet, at: canvas.size)
-            withExtendedLifetime(env.socket) {}
-
-            XCTAssertEqual(host.view.frame.width, canvas.size.width, accuracy: 0.5,
-                           "discovery sheet must take the full \(canvas.name) width")
-            XCTAssertEqual(host.view.frame.height, canvas.size.height, accuracy: 0.5,
-                           "discovery sheet must take the full \(canvas.name) height")
+            LayoutHosting.assertNothingStrandedHorizontally(in: host)
+            withExtendedLifetime(env) {}
         }
     }
 
     func testIngestSheetComposesAtEveryPresentationSize() {
         for canvas in Self.canvases {
-            let env = makeEnvironment()
-            let sheet = IngestSheet().environment(env.ingest)
+            let env = StellarTestEnvironment()
+            let host = LayoutHosting.host(
+                env.inject(into: IngestSheet(), idiom: canvas.idiom),
+                size: canvas.size,
+                sizeClass: canvas.sizeClass)
 
-            let host = render(sheet, at: canvas.size)
-            withExtendedLifetime(env.socket) {}
-
-            XCTAssertEqual(host.view.frame.width, canvas.size.width, accuracy: 0.5,
-                           "ingest sheet must take the full \(canvas.name) width")
-            XCTAssertEqual(host.view.frame.height, canvas.size.height, accuracy: 0.5,
-                           "ingest sheet must take the full \(canvas.name) height")
+            LayoutHosting.assertNothingStrandedHorizontally(in: host)
+            withExtendedLifetime(env) {}
         }
     }
 }

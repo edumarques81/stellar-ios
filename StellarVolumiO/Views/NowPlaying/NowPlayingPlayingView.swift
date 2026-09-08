@@ -116,12 +116,14 @@ struct NowPlayingPlayingView: View {
 
             VStack(spacing: 4) {
                 Text(state.title.isEmpty ? "—" : state.title)
+                    .accessibilityIdentifier("now-playing-title")
                     .font(.system(size: 22, weight: .bold))
                     .lineLimit(2)
                 Text(state.artist)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Text(state.album)
+                    .accessibilityIdentifier("now-playing-album")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)

@@ -19,12 +19,13 @@ import SwiftUI
 @MainActor
 final class AirplayLayoutRenderTests: XCTestCase {
 
-    private static let canvases: [(name: String, size: CGSize)] = [
-        ("iPhone 16 Pro portrait",  CGSize(width: 393,  height: 852)),
-        ("iPad Slide Over",         CGSize(width: 320,  height: 1024)),
-        ("iPad mini portrait",      CGSize(width: 744,  height: 1133)),
-        ("iPad Pro 11in landscape", CGSize(width: 1194, height: 834)),
-        ("iPad Pro 13in landscape", CGSize(width: 1366, height: 1024)),
+    private static let canvases: [(name: String, sizeClass: UIUserInterfaceSizeClass,
+                                   idiom: UIUserInterfaceIdiom, size: CGSize)] = [
+        ("iPhone 16 Pro portrait",  .compact, .phone, CGSize(width: 393,  height: 852)),
+        ("iPad Slide Over",         .compact, .pad,   CGSize(width: 320,  height: 1024)),
+        ("iPad mini portrait",      .regular, .pad,   CGSize(width: 744,  height: 1133)),
+        ("iPad Pro 11in landscape", .regular, .pad,   CGSize(width: 1194, height: 834)),
+        ("iPad Pro 13in landscape", .regular, .pad,   CGSize(width: 1366, height: 1024)),
     ]
 
     private static let session = AirplayState(
@@ -43,73 +44,57 @@ final class AirplayLayoutRenderTests: XCTestCase {
         bitDepth: 16
     )
 
-    /// The environment `NowPlayingView` reads. The `SocketService` comes back
-    /// with it because the stores hold it weakly — dropping it here would kill
-    /// every binding before layout runs.
-    private func makeView(active: Bool) -> (view: AnyView, socket: SocketService) {
-        let config = BackendConfigStore()
-        let socket = SocketService(config: config)
-        let airplay = AirplayStore()
-        if active { airplay.receiveServerState(Self.session) }
-
-        let view = NowPlayingView()
-            .environment(socket)
-            .environment(config)
-            .environment(PlayerStore())
-            .environment(airplay)
-            .environment(LastPlayedStore())
-            .environment(AlbumTracksStore())
-
-        return (AnyView(view), socket)
-    }
-
-    private func render(_ view: AnyView, at size: CGSize) -> UIHostingController<AnyView> {
-        let host = UIHostingController(rootView: view)
-        host.view.frame = CGRect(origin: .zero, size: size)
-        host.view.layoutIfNeeded()
-        return host
+    private func render(size: CGSize,
+                        sizeClass: UIUserInterfaceSizeClass,
+                        idiom: UIUserInterfaceIdiom)
+    -> (host: UIHostingController<AnyView>, env: StellarTestEnvironment) {
+        let env = StellarTestEnvironment()
+        env.airplay.receiveServerState(Self.session)
+        let host = LayoutHosting.host(env.inject(into: NowPlayingView(), idiom: idiom),
+                                      size: size,
+                                      sizeClass: sizeClass)
+        return (host, env)
     }
 
     func testAirplayBranchComposesAtEveryCanvasSize() {
         for canvas in Self.canvases {
-            let made = makeView(active: true)
-            let host = render(made.view, at: canvas.size)
-            withExtendedLifetime(made.socket) {}
-
-            XCTAssertEqual(host.view.frame.width, canvas.size.width, accuracy: 0.5,
-                           "AirPlay branch must fill \(canvas.name) width")
-            XCTAssertEqual(host.view.frame.height, canvas.size.height, accuracy: 0.5,
-                           "AirPlay branch must fill \(canvas.name) height")
+            let rendered = render(size: canvas.size,
+                                  sizeClass: canvas.sizeClass,
+                                  idiom: canvas.idiom)
+            LayoutHosting.assertNothingStrandedHorizontally(in: rendered.host)
+            withExtendedLifetime(rendered.env) {}
         }
     }
 
     /// A live resize — rotation, a Split View drag, Stage Manager — must not
     /// take the branch down mid-session.
     func testAirplayBranchSurvivesLiveResize() {
-        let made = makeView(active: true)
-        let host = UIHostingController(rootView: made.view)
+        let env = StellarTestEnvironment()
+        env.airplay.receiveServerState(Self.session)
+        let host = LayoutHosting.host(env.inject(into: NowPlayingView(), idiom: .pad),
+                                      size: Self.canvases[0].size,
+                                      sizeClass: .regular)
 
         for canvas in Self.canvases {
             host.view.frame = CGRect(origin: .zero, size: canvas.size)
             host.view.layoutIfNeeded()
             XCTAssertGreaterThan(host.view.frame.height, 0,
                                  "AirPlay branch must retain height at \(canvas.name)")
+            LayoutHosting.assertNothingStrandedHorizontally(in: host)
         }
 
-        withExtendedLifetime(made.socket) {}
+        withExtendedLifetime(env) {}
     }
 
-    /// The branch switch itself: an empty store must render the MPD side, an
-    /// active one the AirPlay side. Asserted through the display-state adapter
-    /// rather than the view hierarchy, because that adapter is what decides
-    /// whether seek and the format strip are drawn.
+    /// The suppression contract, asserted through the display-state adapter —
+    /// that adapter is what decides whether seek and the format strip are drawn
+    /// (`NowPlayingPlayingView` hides both behind `if !state.isAirplay`).
     func testActiveSessionSuppressesSeekAndFormatStrip() {
         let display = NowPlayingDisplayState.from(airplay: Self.session)
 
-        // `isAirplay` is the single gate: NowPlayingPlayingView hides both the
-        // SeekBar and the FormatBadgeStrip behind `if !state.isAirplay`.
-        XCTAssertTrue(display.isAirplay,
-                      "a session with a sender must select the AirPlay branch")
+        XCTAssertEqual(display.airplaySender, Self.session.sender,
+                       "the sender name is what flags the AirPlay branch to the renderer")
+        XCTAssertTrue(display.isAirplay)
         XCTAssertFalse(display.canSeek,
                        "AirPlay 1 has no scrub — DACP cannot seek, so the bar must not accept drag")
         XCTAssertEqual(display.samplerate, "",
@@ -118,11 +103,33 @@ final class AirplayLayoutRenderTests: XCTestCase {
         XCTAssertEqual(display.trackType, "")
         XCTAssertEqual(display.title, Self.session.title)
         XCTAssertEqual(display.artist, Self.session.artist)
-        XCTAssertEqual(display.airplaySender, Self.session.sender)
 
-        // And the other side of the switch: an inactive session must not be
-        // mistaken for the AirPlay branch.
-        XCTAssertFalse(NowPlayingDisplayState.from(airplay: .empty).airplaySender?.isEmpty == false,
-                       "an empty session carries no sender")
+        // The MPD branch is the other side of the switch, and it comes from a
+        // different constructor entirely — `airplaySender` is nil there, so
+        // `isAirplay` is false and both the seek bar and the format strip draw.
+        XCTAssertFalse(NowPlayingDisplayState(
+            title: "", artist: "", album: "", trackType: "flac",
+            samplerate: "96 kHz", bitdepth: "24 bit",
+            seekSeconds: 0, durationSeconds: 0, isPlaying: false,
+            canSeek: true, canControl: true,
+            airplaySender: nil, albumArt: .none).isAirplay)
+    }
+
+    /// Documented latent defect, deliberately asserted as-is rather than fixed.
+    ///
+    /// `from(airplay:)` maps `airplaySender: s.sender` unconditionally, and
+    /// `AirplayState.empty.sender` is `""` — not nil — so an *empty* session
+    /// adapts to a state that claims to be the AirPlay branch. It is latent
+    /// only: `NowPlayingView` reaches the adapter exclusively when
+    /// `airplay.state.isActive`, so an empty state never gets there. Changing
+    /// the adapter to map `""` to nil would be correct, but it is an iPhone
+    /// behaviour change and out of scope for the iPad port. Pinned here so the
+    /// next reader finds it deliberate instead of rediscovering it.
+    func testEmptySessionAdaptsToAFalsePositiveAirplayFlag_knownLatentDefect() {
+        let adapted = NowPlayingDisplayState.from(airplay: .empty)
+        XCTAssertEqual(adapted.airplaySender, "",
+                       "empty sender maps through as empty string, not nil")
+        XCTAssertTrue(adapted.isAirplay,
+                      "known latent defect — unreachable because the caller gates on isActive")
     }
 }
