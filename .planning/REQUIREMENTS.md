@@ -15,13 +15,13 @@
 
 ### Navigation (NAV)
 
-- [ ] **NAV-01**: On a regular-width horizontal size class the root is a `NavigationSplitView` with a sidebar; on compact it is the existing `TabView`, unchanged.
-- [ ] **NAV-02**: The sidebar lists Now Playing, Library and Settings as selectable destinations.
-- [ ] **NAV-03**: LCD power and VU meter are **toggle controls** in the sidebar, not navigation destinations — the phantom-tab trick is not carried over.
-- [ ] **NAV-04**: Their icons reflect live state (`display`/`display.slash`, `waveform`/`waveform.slash`) exactly as the tab bar does today.
-- [ ] **NAV-05**: Library drill-down (album → tracks, artist → albums → tracks) works in the detail pane and the back affordance behaves correctly.
+- [x] **NAV-01**: On a regular-width horizontal size class the root is a `NavigationSplitView` with a sidebar; on compact it is the existing `TabView`, unchanged.
+- [x] **NAV-02**: The sidebar lists Now Playing, Library and Settings as selectable destinations.
+- [x] **NAV-03**: LCD power and VU meter are **toggle controls** in the sidebar, not navigation destinations — the phantom-tab trick is not carried over.
+- [x] **NAV-04**: Their icons reflect live state (`display`/`display.slash`, `waveform`/`waveform.slash`) exactly as the tab bar does today.
+- [x] **NAV-05**: Library drill-down (album → tracks, artist → albums → tracks) works in the detail pane and the back affordance behaves correctly.
 - [x] **NAV-06**: The layout decision is made by a pure, unit-testable type — not by scattered `if horizontalSizeClass == …` checks in views.
-- [ ] **NAV-07**: Sidebar selection survives rotation and Split View resize without resetting to the first item.
+- [x] **NAV-07**: Sidebar selection survives rotation and Split View resize without resetting to the first item.
 
 ### Layout (LAYOUT)
 
@@ -88,8 +88,8 @@ Tracked, not in this roadmap.
 | BUILD-01…05 | Phase 1 | Pending |
 | REG-01, REG-03 | Phase 1 | Pending |
 | NAV-06 | Phase 2 | Complete |
-| NAV-01, NAV-02, NAV-07 | Phase 3 | Pending |
-| NAV-03, NAV-04, NAV-05 | Phase 3 | Pending |
+| NAV-01, NAV-02, NAV-07 | Phase 3 | Complete |
+| NAV-03, NAV-04, NAV-05 | Phase 3 | Complete |
 | LAYOUT-01…07 | Phase 4 | Pending |
 | PARITY-01…08 | Phase 5 | Pending |
 | REG-02, REG-04, REG-05 | Phase 5 | Pending |

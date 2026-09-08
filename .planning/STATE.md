@@ -2,7 +2,7 @@
 
 **Updated:** 2026-09-09
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 3 — next
+**Current phase:** Phase 4 — next
 
 ## Progress
 
@@ -11,8 +11,8 @@
 | 0 — Setup & codebase map | ✅ complete |
 | 1 — iPad device family, orientations, multitasking | ✅ complete |
 | 2 — Layout-decision type (TDD) | ✅ complete |
-| 3 — NavigationSplitView sidebar | ⬜ next |
-| 4 — iPad-size layout adaptation | ⬜ |
+| 3 — NavigationSplitView sidebar | ✅ complete |
+| 4 — iPad-size layout adaptation | ⬜ next |
 | 5 — Parity sweep + full regression + code review | ⬜ |
 | 6 — Physical iPad | ⬜ blocked on hardware (expected 2026-09-10) |
 
@@ -38,10 +38,37 @@
   the idiom rather than flashing a tab bar onto an iPad. The truth table is
   asserted exhaustively over every idiom × size class. Nothing consumes it yet —
   zero view changes, as the phase required. 216 tests green on all three sims.
-- **Known verification gap:** scripted simulator rotation does not work here
-  (System Events cannot drive Simulator), so landscape is verified via the built
-  Info.plist and the render tests rather than a rotated screenshot. Real
-  rotation testing happens on the physical iPad in Phase 6.
+- **Phase 3 complete.** `ContentView` now branches on `RootLayoutMode`. The
+  `TabView` moved into `compactTabs` untouched; `regularSidebar` is the new
+  `NavigationSplitView` with Now Playing / Library / Settings as tagged,
+  selectable rows and LCD / VU as untagged buttons whose icons track live state.
+  Both shells write the same `selectedTab`, so a rotation or Split View resize
+  swaps the shell without losing the section (NAV-07). Added
+  `RootNavigationShellTests`, which overrides the child trait collection to
+  drive both branches from one simulator and asserts on the actual UIKit
+  hierarchy (`UISplitViewController` vs `UITabBar`) — including that an iPhone
+  at *regular* width still gets the tab bar. 219 tests green on all three sims.
+  Verified on the iPad Pro 11" sim against the live Pi: sidebar renders, Now
+  Playing plays, Library grid loads real albums.
+- **Detail column is lazy-then-retained, deliberately.** Mounting all three
+  sections up front fired `AlbumPickerView.onAppear` at launch, before the
+  socket connected; `store.load()` went into a dead socket and was never
+  retried, leaving the album grid empty for the whole session. Sections are now
+  built on first visit and kept alive after — the same lifecycle `TabView` gives
+  the iPhone.
+- **Pre-existing bug found (not a port regression, not fixed here):** if Library
+  is the section on screen at launch, the album grid stays permanently empty on
+  *iPhone too* — `AlbumPickerView.onAppear` fires before the socket connects and
+  nothing retries the load. Unreachable in normal use because the app launches
+  on Now Playing. Confirmed by launching both simulators with `.library` as the
+  default section. Worth fixing in `AlbumPickerStore` (retry on connect), out of
+  scope for the port.
+- **Known verification gap:** System Events has no accessibility access to
+  Simulator on this Mac — it cannot read its windows, so neither rotation nor
+  taps can be scripted. Landscape is verified via the built Info.plist and the
+  render tests; sidebar sections were screenshotted by temporarily changing the
+  default section and reverting. Real rotation and touch testing happen on the
+  physical iPad in Phase 6.
 
 ## Environment
 
