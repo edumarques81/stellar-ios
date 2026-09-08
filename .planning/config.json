@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "project": "stellar-ios-ipad-port",
+  "workflow": {
+    "granularity": "standard",
+    "execution": "sequential",
+    "commit_docs": true,
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "code_review": true,
+    "subagent_timeout": 600000
+  },
+  "git": {
+    "branch": "feature/ipad-port",
+    "base": "main",
+    "push_per_phase": true
+  },
+  "tdd": {
+    "required": true,
+    "note": "Tests first. swift test does not work here; all tests run on a simulator destination selected by UDID."
+  },
+  "simulators": {
+    "ipad_primary": "49C99399-FBED-4478-AD20-3B7F63D653C7",
+    "ipad_small": "D204C330-DE77-4760-919D-8AAD044DA93E",
+    "iphone_regression": "71E156C3-0CC1-4659-86AA-B044DE8CDBEB"
+  }
+}
