@@ -2,15 +2,15 @@
 
 **Updated:** 2026-09-09
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 1 — not started
+**Current phase:** Phase 2 — next
 
 ## Progress
 
 | Phase | Status |
 |---|---|
 | 0 — Setup & codebase map | ✅ complete |
-| 1 — iPad device family, orientations, multitasking | ⬜ next |
-| 2 — Layout-decision type (TDD) | ⬜ |
+| 1 — iPad device family, orientations, multitasking | ✅ complete |
+| 2 — Layout-decision type (TDD) | ⬜ next |
 | 3 — NavigationSplitView sidebar | ⬜ |
 | 4 — iPad-size layout adaptation | ⬜ |
 | 5 — Parity sweep + full regression + code review | ⬜ |
@@ -22,6 +22,18 @@
 - `.planning/codebase/` — seven documents (679 lines), committed.
 - `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `config.json` written.
 - Baseline confirmed: 205 tests green, clean build with zero warnings.
+- **Phase 1 complete.** `TARGETED_DEVICE_FAMILY: "1,2"`, `UIRequiresFullScreen`
+  removed, per-idiom orientations (`UISupportedInterfaceOrientations~ipad` with
+  all four; iPhone stays portrait-only). Verified against the *built* Info.plist,
+  not just the spec. Added `RootLayoutRenderTests` — hosts the real root view
+  with the full environment graph across seven canvases from a 320pt Slide Over
+  pane to 13" landscape, plus a live-resize sequence. 207 tests green on all
+  three simulators. App installed and launched on the iPad Pro 11" sim against
+  the live Pi backend.
+- **Known verification gap:** scripted simulator rotation does not work here
+  (System Events cannot drive Simulator), so landscape is verified via the built
+  Info.plist and the render tests rather than a rotated screenshot. Real
+  rotation testing happens on the physical iPad in Phase 6.
 
 ## Environment
 
