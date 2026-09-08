@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# deploy-to-device.sh — Build + install + launch StellarVolumiO on a paired iPhone.
+# deploy-to-device.sh — Build + install + launch StellarVolumiO on a paired
+# iPhone or iPad. The app is universal as of the iPad port; nothing here is
+# model-specific beyond which device you select.
 #
 # Works over USB or the local network — anything `xcrun devicectl` can reach.
 # Swift Packages alone can't produce a signed iOS .app, so this script
@@ -15,7 +17,7 @@
 #                     (3S2JYQ4JNX). Override if your team differs.
 #   CONFIGURATION     Debug | Release (default Debug — Release strips logging
 #                     symbols and is signed the same way, both work over the LAN).
-#   DEVICE_UDID       Hardware UDID of the phone to install on. Required only
+#   DEVICE_UDID       Hardware UDID of the device to install on. Required only
 #                     when more than one iOS device is paired and stdin is not
 #                     a TTY (the script prompts interactively otherwise).
 #
@@ -25,6 +27,7 @@
 #   distinguishes them. Pass a substring as the first argument to pick one:
 #
 #   ./scripts/deploy-to-device.sh "15 Pro"
+#   ./scripts/deploy-to-device.sh "iPad"
 #   DEVICE_UDID=00008130-001024A61A50001C ./scripts/deploy-to-device.sh
 #
 set -e -o pipefail
@@ -69,16 +72,17 @@ xcrun devicectl list devices --json-output "$DEVICES_JSON" >/dev/null 2>&1 || {
   exit 1
 }
 
-# One TAB-separated record per paired iOS device (the Apple Watch is filtered
-# out by platform). Fields: udid, coredevice uuid, marketing name, given name,
-# tunnel state.
+# One TAB-separated record per paired iOS/iPadOS device (the Apple Watch is
+# filtered out by platform). devicectl reports iPads as platform "iOS", but
+# accept "iPadOS" too rather than betting the iPad pass on that staying true.
+# Fields: udid, coredevice uuid, marketing name, given name, tunnel state.
 DEVICE_TABLE=$(python3 - "$DEVICES_JSON" <<'PY'
 import json, sys
 with open(sys.argv[1]) as fh:
     payload = json.load(fh)
 for dev in payload.get("result", {}).get("devices", []):
     hw = dev.get("hardwareProperties", {})
-    if hw.get("platform") != "iOS":
+    if hw.get("platform") not in ("iOS", "iPadOS"):
         continue
     udid = hw.get("udid")
     ident = dev.get("identifier")
