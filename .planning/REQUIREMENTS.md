@@ -7,11 +7,11 @@
 
 ### Build & platform (BUILD)
 
-- [ ] **BUILD-01**: `TARGETED_DEVICE_FAMILY` is `"1,2"`; the app installs and launches on an iPad simulator.
-- [ ] **BUILD-02**: `UIRequiresFullScreen` is removed from `project.yml`.
-- [ ] **BUILD-03**: `UISupportedInterfaceOrientations` covers portrait, portrait-upside-down, landscape-left and landscape-right on iPad; the iPhone remains portrait-only.
-- [ ] **BUILD-04**: The app participates in Split View and Stage Manager without crashing, blanking, or losing socket connection.
-- [ ] **BUILD-05**: `xcodegen generate --spec project.yml` regenerates cleanly and the build emits **zero** warnings.
+- [x] **BUILD-01**: `TARGETED_DEVICE_FAMILY` is `"1,2"`; the app installs and launches on an iPad simulator.
+- [x] **BUILD-02**: `UIRequiresFullScreen` is removed from `project.yml`.
+- [x] **BUILD-03**: `UISupportedInterfaceOrientations` covers portrait, portrait-upside-down, landscape-left and landscape-right on iPad; the iPhone remains portrait-only.
+- [ ] **BUILD-04**: The app participates in Split View and Stage Manager without crashing, blanking, or losing socket connection. *(Rotation is verified on the simulator by `ParitySweepTests.test08`; Split View and Stage Manager cannot be driven there, so the remaining half moves to DEVICE-02.)*
+- [x] **BUILD-05**: `xcodegen generate --spec project.yml` regenerates cleanly and the build emits **zero** warnings.
 
 ### Navigation (NAV)
 
@@ -38,22 +38,22 @@
 Every shipped capability must work on iPad. Note this is **eight** capabilities,
 not the six in the app's stated scope — see `.planning/codebase/CONCERNS.md` §7.
 
-- [ ] **PARITY-01**: Transport — play/pause, next/prev, seek.
-- [ ] **PARITY-02**: Album picker → Album Tracks, including Play Album and per-track play.
-- [ ] **PARITY-03**: Artist picker → artist albums → Album Tracks.
-- [ ] **PARITY-04**: LCD on/off toggle.
-- [ ] **PARITY-05**: Backend server selection — Bonjour discovery sheet and manual host/port.
-- [ ] **PARITY-06**: AirPlay source mode, with seek and format strip suppressed.
-- [ ] **PARITY-07**: VU meter view toggle.
-- [ ] **PARITY-08**: Ingest / "Import from inbox" sheet.
+- [x] **PARITY-01**: Transport — play/pause, next/prev, seek.
+- [x] **PARITY-02**: Album picker → Album Tracks, including Play Album and per-track play.
+- [x] **PARITY-03**: Artist picker → artist albums → Album Tracks.
+- [x] **PARITY-04**: LCD on/off toggle.
+- [x] **PARITY-05**: Backend server selection — Bonjour discovery sheet and manual host/port.
+- [x] **PARITY-06**: AirPlay source mode, with seek and format strip suppressed. *(Branch verified by `AirplayLayoutRenderTests` at every iPad canvas plus the suppression contract; a live session needs a real sender, so end-to-end AirPlay moves to DEVICE-02.)*
+- [x] **PARITY-07**: VU meter view toggle.
+- [x] **PARITY-08**: Ingest / "Import from inbox" sheet.
 
 ### Regression safety (REG)
 
-- [ ] **REG-01**: The full existing suite (205 tests) passes on the iPhone simulator.
-- [ ] **REG-02**: The full suite passes on the iPad primary and iPad small simulators.
-- [ ] **REG-03**: The iPhone renders the same `TabView` hierarchy as before, verified by test, not by eye.
-- [ ] **REG-04**: No change to the Socket.IO wire contract; `SocketEmitArgumentShapeTests` still passes unmodified.
-- [ ] **REG-05**: `setVolume` / `toggleMute` remain present and uncalled.
+- [x] **REG-01**: The full existing suite (205 tests) passes on the iPhone simulator.
+- [x] **REG-02**: The full suite passes on the iPad primary and iPad small simulators.
+- [x] **REG-03**: The iPhone renders the same `TabView` hierarchy as before, verified by test, not by eye.
+- [x] **REG-04**: No change to the Socket.IO wire contract; `SocketEmitArgumentShapeTests` still passes unmodified.
+- [x] **REG-05**: `setVolume` / `toggleMute` remain present and uncalled.
 
 ### On-device (DEVICE)
 
@@ -85,12 +85,14 @@ Tracked, not in this roadmap.
 
 | Requirement | Phase | Status |
 |---|---|---|
-| BUILD-01…05 | Phase 1 | Pending |
-| REG-01, REG-03 | Phase 1 | Pending |
+| BUILD-01, 02, 03, 05 | Phase 1 | Complete |
+| BUILD-04 | Phase 1 / Phase 6 | Rotation complete; Split View + Stage Manager deferred to DEVICE-02 |
+| REG-01, REG-03 | Phase 1 | Complete |
 | NAV-06 | Phase 2 | Complete |
 | NAV-01, NAV-02, NAV-07 | Phase 3 | Complete |
 | NAV-03, NAV-04, NAV-05 | Phase 3 | Complete |
 | LAYOUT-01…07 | Phase 4 | Complete |
-| PARITY-01…08 | Phase 5 | Pending |
-| REG-02, REG-04, REG-05 | Phase 5 | Pending |
+| PARITY-01…05, 07, 08 | Phase 5 | Complete |
+| PARITY-06 | Phase 5 / Phase 6 | Branch complete; live session deferred to DEVICE-02 |
+| REG-02, REG-04, REG-05 | Phase 5 | Complete |
 | DEVICE-01, DEVICE-02 | Phase 6 | Pending |

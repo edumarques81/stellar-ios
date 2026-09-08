@@ -115,6 +115,23 @@ targets:
     dependencies:
       - target: StellarVolumiO
 
+  # Parity sweep harness. Deliberately NOT in the StellarVolumiO scheme: these
+  # launch the app and talk to the real backend, so they are slow and depend on
+  # the Pi being up. `scripts/test.sh` stays the fast, hermetic unit run.
+  StellarVolumiOUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: StellarVolumiOUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fit.stellar.remote.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: StellarVolumiO
+    dependencies:
+      - target: StellarVolumiO
+
 schemes:
   StellarVolumiO:
     build:
@@ -127,3 +144,13 @@ schemes:
       config: Debug
       targets:
         - StellarVolumiOTests
+
+  StellarVolumiOUITests:
+    build:
+      targets:
+        StellarVolumiO: all
+        StellarVolumiOUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - StellarVolumiOUITests
