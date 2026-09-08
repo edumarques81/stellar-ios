@@ -2,7 +2,7 @@
 
 **Updated:** 2026-09-09
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 2 — next
+**Current phase:** Phase 3 — next
 
 ## Progress
 
@@ -10,8 +10,8 @@
 |---|---|
 | 0 — Setup & codebase map | ✅ complete |
 | 1 — iPad device family, orientations, multitasking | ✅ complete |
-| 2 — Layout-decision type (TDD) | ⬜ next |
-| 3 — NavigationSplitView sidebar | ⬜ |
+| 2 — Layout-decision type (TDD) | ✅ complete |
+| 3 — NavigationSplitView sidebar | ⬜ next |
 | 4 — iPad-size layout adaptation | ⬜ |
 | 5 — Parity sweep + full regression + code review | ⬜ |
 | 6 — Physical iPad | ⬜ blocked on hardware (expected 2026-09-10) |
@@ -30,6 +30,14 @@
   pane to 13" landscape, plus a live-resize sequence. 207 tests green on all
   three simulators. App installed and launched on the iPad Pro 11" sim against
   the live Pi backend.
+- **Phase 2 complete.** `RootLayoutMode` (`Utils/RootLayoutMode.swift`) — a pure
+  enum with one `resolve(horizontalSizeClass:idiom:)` function, written
+  test-first (the 9 tests were red for "cannot find 'RootLayoutMode' in scope"
+  before the type existed). Rules: only an iPad can reach `.sidebar`; a compact
+  width means `.tabs` even on an iPad (Slide Over); a `nil` size class defers to
+  the idiom rather than flashing a tab bar onto an iPad. The truth table is
+  asserted exhaustively over every idiom × size class. Nothing consumes it yet —
+  zero view changes, as the phase required. 216 tests green on all three sims.
 - **Known verification gap:** scripted simulator rotation does not work here
   (System Events cannot drive Simulator), so landscape is verified via the built
   Info.plist and the render tests rather than a rotated screenshot. Real
