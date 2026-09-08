@@ -25,13 +25,13 @@
 
 ### Layout (LAYOUT)
 
-- [ ] **LAYOUT-01**: No screen has clipped, overlapped, or stranded content between 320 pt and 1366 pt of width.
-- [ ] **LAYOUT-02**: Now Playing artwork, the play disc and the AirPlay badge scale sensibly on a large canvas instead of sitting at phone-fixed sizes.
-- [ ] **LAYOUT-03**: Album and artist grids gain columns on iPad (already `GridItem(.adaptive)`; verify, don't rebuild).
-- [ ] **LAYOUT-04**: `AlbumTracksView`'s 240×240 hero and `AirplaySourceBadge`'s 240 pt width adapt to available width.
-- [ ] **LAYOUT-05**: `StellarGlassyBackground`'s radial gradients scale with the canvas rather than using an absolute 280 pt radius.
-- [ ] **LAYOUT-06**: All touch targets remain ≥ 44×44 pt.
-- [ ] **LAYOUT-07**: Sheets (`BackendDiscoverySheet`, `IngestSheet`) present appropriately on a large canvas.
+- [x] **LAYOUT-01**: No screen has clipped, overlapped, or stranded content between 320 pt and 1366 pt of width.
+- [x] **LAYOUT-02**: Now Playing artwork, the play disc and the AirPlay badge scale sensibly on a large canvas instead of sitting at phone-fixed sizes.
+- [x] **LAYOUT-03**: Album and artist grids gain columns on iPad (already `GridItem(.adaptive)`; verify, don't rebuild).
+- [x] **LAYOUT-04**: `AlbumTracksView`'s 240×240 hero and `AirplaySourceBadge`'s 240 pt width adapt to available width.
+- [x] **LAYOUT-05**: `StellarGlassyBackground`'s radial gradients scale with the canvas rather than using an absolute 280 pt radius.
+- [x] **LAYOUT-06**: All touch targets remain ≥ 44×44 pt.
+- [x] **LAYOUT-07**: Sheets (`BackendDiscoverySheet`, `IngestSheet`) present appropriately on a large canvas.
 
 ### Feature parity (PARITY)
 
@@ -90,7 +90,7 @@ Tracked, not in this roadmap.
 | NAV-06 | Phase 2 | Complete |
 | NAV-01, NAV-02, NAV-07 | Phase 3 | Complete |
 | NAV-03, NAV-04, NAV-05 | Phase 3 | Complete |
-| LAYOUT-01…07 | Phase 4 | Pending |
+| LAYOUT-01…07 | Phase 4 | Complete |
 | PARITY-01…08 | Phase 5 | Pending |
 | REG-02, REG-04, REG-05 | Phase 5 | Pending |
 | DEVICE-01, DEVICE-02 | Phase 6 | Pending |

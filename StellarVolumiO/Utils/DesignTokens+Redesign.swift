@@ -41,6 +41,16 @@ enum Stellar {
         static let playGlyphOffset: CGFloat = 2
         /// Minimum touch target (Apple HIG).
         static let minTouchTarget: CGFloat = 44
+        /// Widest a single reading column is allowed to get.
+        ///
+        /// Every iPhone is narrower than this, so on the phone it is a no-op.
+        /// On an iPad it stops Now Playing from inflating its artwork and its
+        /// title to the full width of a 13" detail pane, where a 1000 pt album
+        /// cover would push the transport controls off the first screenful.
+        static let contentMaxWidth: CGFloat = 560
+        /// Album-cover hero side on a regular-width canvas. The compact value
+        /// (240) is what the iPhone has always used and is left alone.
+        static let heroSideRegular: CGFloat = 320
     }
 
     enum Shadow {
@@ -54,23 +64,35 @@ enum Stellar {
 // of the deep base mimic PlayerLayout.svelte's radial-gradient sheen.
 
 struct StellarGlassyBackground: View {
+    /// The radii used to be a flat 280 pt, which reads as a soft sheen on a
+    /// 393 pt iPhone and as two small smudges in the corner of a 1366 pt iPad.
+    /// Scaling off the canvas's *shorter* side keeps the sheen the same
+    /// proportion of the screen in either orientation, and the 0.71 factor is
+    /// chosen so a 393 pt-wide iPhone still lands on ~280 — the phone is
+    /// deliberately unchanged.
+    private static let radiusFactor: CGFloat = 0.71
+
     var body: some View {
-        ZStack {
-            Stellar.Color.baseBackground
+        GeometryReader { geo in
+            let radius = min(geo.size.width, geo.size.height) * Self.radiusFactor
 
-            RadialGradient(
-                colors: [SwiftUI.Color.white.opacity(0.085), .clear],
-                center: UnitPoint(x: 0.85, y: 0.15),
-                startRadius: 0,
-                endRadius: 280
-            )
+            ZStack {
+                Stellar.Color.baseBackground
 
-            RadialGradient(
-                colors: [SwiftUI.Color(red: 40/255, green: 60/255, blue: 90/255, opacity: 0.15), .clear],
-                center: UnitPoint(x: 0.80, y: 0.90),
-                startRadius: 0,
-                endRadius: 280
-            )
+                RadialGradient(
+                    colors: [SwiftUI.Color.white.opacity(0.085), .clear],
+                    center: UnitPoint(x: 0.85, y: 0.15),
+                    startRadius: 0,
+                    endRadius: radius
+                )
+
+                RadialGradient(
+                    colors: [SwiftUI.Color(red: 40/255, green: 60/255, blue: 90/255, opacity: 0.15), .clear],
+                    center: UnitPoint(x: 0.80, y: 0.90),
+                    startRadius: 0,
+                    endRadius: radius
+                )
+            }
         }
         .ignoresSafeArea()
     }

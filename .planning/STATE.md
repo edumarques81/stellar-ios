@@ -2,7 +2,7 @@
 
 **Updated:** 2026-09-09
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 4 — next
+**Current phase:** Phase 5 — next
 
 ## Progress
 
@@ -12,8 +12,8 @@
 | 1 — iPad device family, orientations, multitasking | ✅ complete |
 | 2 — Layout-decision type (TDD) | ✅ complete |
 | 3 — NavigationSplitView sidebar | ✅ complete |
-| 4 — iPad-size layout adaptation | ⬜ next |
-| 5 — Parity sweep + full regression + code review | ⬜ |
+| 4 — iPad-size layout adaptation | ✅ complete |
+| 5 — Parity sweep + full regression + code review | ⬜ next |
 | 6 — Physical iPad | ⬜ blocked on hardware (expected 2026-09-10) |
 
 ## Done so far
@@ -50,6 +50,34 @@
   at *regular* width still gets the tab bar. 219 tests green on all three sims.
   Verified on the iPad Pro 11" sim against the live Pi: sidebar renders, Now
   Playing plays, Library grid loads real albums.
+- **Phase 4 complete.** Layout now adapts to the canvas instead of sitting at
+  phone-fixed sizes. Two new tokens: `Stellar.Metric.contentMaxWidth` (560) caps
+  the Now Playing reading column so it does not stretch to a 1194 pt line, and
+  `heroSideRegular` (320) steps the `AlbumTracksView` cover up from the phone's
+  240 on regular width. `StellarGlassyBackground` derives its radial-gradient
+  radius from the canvas (`min(w, h) * 0.71`) rather than a flat 280 pt, chosen
+  so a 393 pt iPhone still lands on ~280 — the phone is byte-for-byte unchanged
+  (REG-01). Now Playing centres vertically only on regular width; the iPhone
+  keeps its top alignment. Added `AlbumTracksLayoutRenderTests` (3) and
+  `SheetLayoutRenderTests` (2). **224 tests green on all three sims.** Verified
+  visually on the iPad Pro 11" sim against the live Pi and on the iPhone 16 Pro
+  sim for regression.
+- **Two requirement clauses needed no code — they were mis-mappings from the
+  Phase 0 codebase map.** `AirplaySourceBadge`'s `.frame(width: 240)` exists
+  only inside its `#Preview`, not in production, so LAYOUT-04's badge clause has
+  no production call site to fix; and `StellarLogoView` has no production call
+  sites at all. Recorded rather than "fixed" so a later reader does not go
+  looking for the change.
+- **LAYOUT-03, 06 and 07 were verify-don't-rebuild, and verified as such.** The
+  album and artist grids are already `GridItem(.adaptive(minimum: 150, maximum:
+  200))`, so they gain columns on a wide detail column with no change.
+  `minTouchTarget` (44) is used throughout and a grep for interactive elements
+  with a sub-44 explicit frame returns nothing; the only new interactive
+  elements in the port are the sidebar LCD/VU buttons, which pin it explicitly.
+  Both sheets are a `NavigationStack` over `maxWidth: .infinity` content with no
+  hardcoded width, so they fill the iPad form sheet — pinned by
+  `SheetLayoutRenderTests` at 540x620 and 704x820 so a width added later fails
+  loudly instead of only stranding content on iPad.
 - **Detail column is lazy-then-retained, deliberately.** Mounting all three
   sections up front fired `AlbumPickerView.onAppear` at launch, before the
   socket connected; `store.load()` went into a dead socket and was never

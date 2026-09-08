@@ -22,19 +22,38 @@ struct NowPlayingView: View {
     @Environment(SocketService.self) private var socket
     @Environment(LastPlayedStore.self) private var lastPlayed
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var body: some View {
         ZStack {
             StellarGlassyBackground()
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    content
-                        .padding(.top, 24)
-                        .padding(.bottom, 24)
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        content
+                            .padding(.top, 24)
+                            .padding(.bottom, 24)
+                            // Cap the column, then centre it. The hero is
+                            // `maxWidth: .infinity`, so without the cap it
+                            // would grow to whatever the iPad hands it — a
+                            // 1000 pt cover with the transport controls
+                            // somewhere below the fold. No iPhone is this
+                            // wide, so the phone is unaffected.
+                            .frame(maxWidth: Stellar.Metric.contentMaxWidth)
+                            .frame(maxWidth: .infinity)
+                    }
+                    // On a tall iPad pane the column would otherwise sit
+                    // jammed against the top with the bottom half empty.
+                    // `minHeight` rather than `height`: when the content is
+                    // taller than the pane — an 11" in landscape, say — it
+                    // still lays out in full and scrolls.
+                    .frame(minHeight: centreVertically ? geo.size.height : 0,
+                           alignment: .center)
                 }
+                .scrollIndicators(.hidden)
+                .contentMargins(.bottom, 16, for: .scrollContent)
             }
-            .scrollIndicators(.hidden)
-            .contentMargins(.bottom, 16, for: .scrollContent)
         }
         // Re-fetch the AirPlay snapshot whenever the tab becomes visible.
         // Covers the case where the user backgrounds the app, an AirPlay
@@ -45,6 +64,10 @@ struct NowPlayingView: View {
             socket.requestAirplayState()
         }
     }
+
+    /// The iPhone has always top-aligned and always fills its screen; leave it
+    /// alone (REG-01) and only centre on the roomier canvas.
+    private var centreVertically: Bool { horizontalSizeClass == .regular }
 
     @ViewBuilder
     private var content: some View {

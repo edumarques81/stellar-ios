@@ -119,6 +119,19 @@ private struct AlbumCoverHero: View {
     let host: String
     let port: Int
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// 240 is the size the iPhone shipped with and the size a Slide Over pane
+    /// still needs. A regular-width canvas gets a larger cover; it is a step
+    /// rather than a ratio because the surrounding track list is a fixed-width
+    /// reading column, not a grid, so there is nothing for a continuous scale
+    /// to stay in proportion with.
+    private var side: CGFloat {
+        horizontalSizeClass == .regular
+            ? Stellar.Metric.heroSideRegular
+            : 240
+    }
+
     var body: some View {
         Group {
             if let url = artworkURL {
@@ -131,7 +144,7 @@ private struct AlbumCoverHero: View {
                 placeholder
             }
         }
-        .frame(width: 240, height: 240)
+        .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
         .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
                 radius: Stellar.Shadow.albumArt.radius,
