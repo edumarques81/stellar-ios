@@ -189,22 +189,42 @@ echo "🔨 Building $SCHEME for device ($CONFIGURATION)…"
 echo "   (first build can take 3–5 min; subsequent builds are incremental)"
 
 BUILD_LOG=$(mktemp -t stellar-ios-build)
-set +e
-# `generic/platform=iOS` rather than `id=$HW_UDID`: the generic destination
-# builds one arm64 binary valid for either paired phone and does not require an
-# active tunnel to the device, so the build still succeeds when the phone is
-# asleep or off-network. The device identity only matters at install time.
-xcodebuild build \
-  -project "$PROJECT" \
-  -scheme "$SCHEME" \
-  -destination "generic/platform=iOS" \
-  -configuration "$CONFIGURATION" \
-  -allowProvisioningUpdates \
-  DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-  CODE_SIGN_STYLE=Automatic \
-  > "$BUILD_LOG" 2>&1
-BUILD_STATUS=$?
-set -e
+
+# Build twice at most, with two different destinations, because they buy
+# different things:
+#
+#   id=$HW_UDID       lets -allowProvisioningDeviceRegistration add a device
+#                     the team profile has never seen. Without a concrete
+#                     device xcodebuild has nothing to register, and the
+#                     install dies with 0xe8008012 "This provisioning profile
+#                     cannot be installed on this device" -- which is what a
+#                     first deploy to any new iPhone or iPad hits.
+#   generic/platform  needs no reachable device at all, so the build still
+#                     succeeds when the device is asleep or off-network.
+#
+# So: aim at the device first, fall back to generic if it is not reachable.
+build_with_destination() {
+  set +e
+  xcodebuild build \
+    -project "$PROJECT" \
+    -scheme "$SCHEME" \
+    -destination "$1" \
+    -configuration "$CONFIGURATION" \
+    -allowProvisioningUpdates \
+    -allowProvisioningDeviceRegistration \
+    DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+    CODE_SIGN_STYLE=Automatic \
+    > "$BUILD_LOG" 2>&1
+  BUILD_STATUS=$?
+  set -e
+}
+
+build_with_destination "id=$HW_UDID"
+if [ $BUILD_STATUS -ne 0 ] && grep -q "Unable to find a destination\|not.*available\|Unable to lookup" "$BUILD_LOG"; then
+  echo "   device destination unavailable — falling back to generic/platform=iOS"
+  echo "   (a brand-new device will not get registered on this pass)"
+  build_with_destination "generic/platform=iOS"
+fi
 
 # Surface only the interesting lines (errors + final verdict).
 grep -E '^/Users.+\.swift:[0-9]+:[0-9]+:|error:|warning:|BUILD SUCCEEDED|BUILD FAILED' "$BUILD_LOG" \
