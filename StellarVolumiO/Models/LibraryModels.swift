@@ -177,6 +177,13 @@ struct LcdStatus: Decodable, Equatable {
 
 // MARK: - Tolerant envelope parsers
 //
+// Every list parsed here ends in `.withUniqueIDs()`. The backend does not
+// guarantee unique ids — an album's is its folder uri, and a classical
+// release grouped per `album_artist` yields several rows behind one uri —
+// and `ForEach` handed a repeat drops views and punches holes in the grid.
+// This is the one choke point every library list passes through, which is
+// why the repair lives here rather than in each store. See UniqueIdentity.swift.
+//
 // Each `init(rawDict:)` accepts the raw [String: Any] that came out of
 // Socket.IO and reads the nested album / artist dicts directly (no
 // JSONSerialization round-trip). Missing keys fall back to "" for strings
@@ -188,7 +195,7 @@ struct LcdStatus: Decodable, Equatable {
 extension PushLibraryAlbums {
     init?(rawDict d: [String: Any]) {
         let rawAlbums = d["albums"] as? [[String: Any]] ?? []
-        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }
+        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }.withUniqueIDs()
         let total = d["total"] as? Int
         self.albums = albums
         self.total = total
@@ -198,7 +205,7 @@ extension PushLibraryAlbums {
 extension PushLibraryArtists {
     init?(rawDict d: [String: Any]) {
         let rawArtists = d["artists"] as? [[String: Any]] ?? []
-        let artists = rawArtists.compactMap { LibraryArtist(rawDict: $0) }
+        let artists = rawArtists.compactMap { LibraryArtist(rawDict: $0) }.withUniqueIDs()
         let total = d["total"] as? Int
         self.artists = artists
         self.total = total
@@ -208,13 +215,13 @@ extension PushLibraryArtists {
 extension PushLibraryArtistAlbums {
     init?(rawDict d: [String: Any]) {
         let rawAlbums = d["albums"] as? [[String: Any]] ?? []
-        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }
+        let albums = rawAlbums.compactMap { LibraryAlbum(rawDict: $0) }.withUniqueIDs()
         let artist = d["artist"] as? String
         // Only populated by the backend when `albums` is empty (ARTIST-04/BROWSE-04).
         // Absent key -> nil, not []; distinguishes "not sent" from "sent empty".
         let looseTracks: [Track]?
         if let rawLoose = d["looseTracks"] as? [[String: Any]] {
-            looseTracks = rawLoose.compactMap { Track(rawDict: $0) }
+            looseTracks = rawLoose.compactMap { Track(rawDict: $0) }.withUniqueIDs()
         } else {
             looseTracks = nil
         }
@@ -287,7 +294,7 @@ extension PushLibraryAlbumTracks {
         let album         = d["album"] as? String ?? ""
         let albumArtist   = d["albumArtist"] as? String ?? ""
         let rawTracks     = d["tracks"] as? [[String: Any]] ?? []
-        let tracks        = rawTracks.compactMap { Track(rawDict: $0) }
+        let tracks        = rawTracks.compactMap { Track(rawDict: $0) }.withUniqueIDs()
         let totalDuration = (d["totalDuration"] as? Int) ?? 0
         let error         = d["error"] as? String
         self.init(album: album, albumArtist: albumArtist, tracks: tracks,
