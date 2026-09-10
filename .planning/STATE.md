@@ -1,8 +1,8 @@
 # State: Stellar Remote — iPad Port
 
-**Updated:** 2026-09-09
+**Updated:** 2026-09-11
 **Branch:** `feature/ipad-port`
-**Current phase:** Phase 6 — blocked on the physical iPad
+**Current phase:** Phase 6 — DEVICE-01 done, DEVICE-02 (manual pass) outstanding
 
 ## Progress
 
@@ -179,7 +179,11 @@ Xcode 26.3 (17C529). Backend at `stellar.local:3000`.
 
 ## Open questions
 
-- None blocking. Phase 6 needs the physical iPad.
+- None blocking. DEVICE-01 cleared on 2026-09-11; DEVICE-02 is a manual pass on
+  the iPad and is the only thing left before the merge.
+- Note for DEVICE-02: the paired iPad is an **iPad12,1 (9th gen)**. It supports
+  Split View and Slide Over but **not Stage Manager**, which needs an M1. The
+  Stage Manager half of BUILD-04 cannot be covered on this hardware.
 
 ## Post-merge follow-up list (not port scope)
 

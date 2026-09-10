@@ -57,7 +57,7 @@ not the six in the app's stated scope — see `.planning/codebase/CONCERNS.md` �
 
 ### On-device (DEVICE)
 
-- [ ] **DEVICE-01**: `scripts/deploy-to-device.sh` installs and launches on a physical iPad.
+- [x] **DEVICE-01**: `scripts/deploy-to-device.sh` installs and launches on a physical iPad. *(Eduardo's iPad, iPad12,1 / iPadOS 26.6.1, 2026-09-11. Needed Developer Mode enabled on the device and a script fix so a never-before-seen device gets registered — see the `-allowProvisioningDeviceRegistration` commit.)*
 - [ ] **DEVICE-02**: Manual pass of all eight capabilities on real hardware, both orientations, plus a Split View and a Stage Manager check.
 
 ## v2 Requirements
@@ -95,4 +95,5 @@ Tracked, not in this roadmap.
 | PARITY-01…05, 07, 08 | Phase 5 | Complete |
 | PARITY-06 | Phase 5 / Phase 6 | Branch complete; live session deferred to DEVICE-02 |
 | REG-02, REG-04, REG-05 | Phase 5 | Complete |
-| DEVICE-01, DEVICE-02 | Phase 6 | Pending |
+| DEVICE-01 | Phase 6 | Done — installs and launches on iPad12,1 |
+| DEVICE-02 | Phase 6 | Pending — manual pass on the iPad |
