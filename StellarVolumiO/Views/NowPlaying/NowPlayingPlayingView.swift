@@ -201,45 +201,26 @@ private struct AlbumArtHero: View {
     let source: AlbumArtSource
 
     var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .frame(maxWidth: .infinity)
-            .overlay {
-                ZStack {
-                    placeholder
-                    switch source {
-                    case .url(let url):
-                        if let url {
-                            CachedAsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                EmptyView()
-                            }
-                        }
-                    case .dataURL(let s):
-                        if let img = Self.decodeDataURL(s) {
-                            Image(uiImage: img).resizable().scaledToFill()
-                        }
-                    case .none:
-                        EmptyView()
-                    }
+        // This hero already used the flexible-square shape; it now shares it
+        // with the grids via `AlbumArtworkSquare`. `scaledToFit` matches them
+        // too, so an AirPlay cover that is not square letterboxes rather than
+        // losing its top and bottom to a centre crop.
+        AlbumArtworkSquare(cornerRadius: Stellar.Metric.artCornerRadius) {
+            switch source {
+            case .url(let url):
+                AlbumArtworkImage(url: url)
+            case .dataURL(let s):
+                if let img = Self.decodeDataURL(s) {
+                    Image(uiImage: img).resizable().scaledToFit()
                 }
+            case .none:
+                EmptyView()
             }
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
-            .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
-                    radius: Stellar.Shadow.albumArt.radius,
-                    y: Stellar.Shadow.albumArt.y)
-    }
-
-    private var placeholder: some View {
-        Rectangle()
-            .fill(LinearGradient(
-                colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
-                         SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ))
+        }
+        .frame(maxWidth: .infinity)
+        .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
+                radius: Stellar.Shadow.albumArt.radius,
+                y: Stellar.Shadow.albumArt.y)
     }
 
     /// Decode a `data:image/...;base64,<payload>` URL into a UIImage.

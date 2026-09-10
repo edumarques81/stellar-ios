@@ -142,20 +142,13 @@ private struct AlbumCoverHero: View {
     }
 
     var body: some View {
-        Group {
-            if let url = artworkURL {
-                CachedAsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    placeholder
-                }
-            } else {
-                placeholder
-            }
+        // `side` is a ceiling on the width; the square follows from it. The
+        // artwork itself is an overlay inside `AlbumArtworkSquare` precisely so
+        // a non-square cover cannot push the hero past that ceiling.
+        AlbumArtworkSquare(cornerRadius: Stellar.Metric.artCornerRadius) {
+            AlbumArtworkImage(url: artworkURL)
         }
-        .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: side, maxHeight: side)
-        .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
+        .frame(maxWidth: side)
         .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
                 radius: Stellar.Shadow.albumArt.radius,
                 y: Stellar.Shadow.albumArt.y)
@@ -168,16 +161,6 @@ private struct AlbumCoverHero: View {
         if s.hasPrefix("http") { return URL(string: s) }
         let path = s.hasPrefix("/") ? s : "/\(s)"
         return URL(string: "http://\(host):\(port)\(path)")
-    }
-
-    private var placeholder: some View {
-        Rectangle()
-            .fill(LinearGradient(
-                colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
-                         SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ))
     }
 }
 
