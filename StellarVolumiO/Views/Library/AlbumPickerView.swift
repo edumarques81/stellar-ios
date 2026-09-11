@@ -24,6 +24,10 @@ struct AlbumPickerView: View {
             .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
+        // Named so the parity sweep can scope to this grid instead of
+        // guessing a scroll-view index — on iPad the sidebar is a scroll
+        // view too, and index-based lookups silently pick it up.
+        .accessibilityIdentifier("album-grid")
         .onAppear {
             if store.albums.isEmpty && !store.loading { store.load() }
         }
@@ -37,28 +41,15 @@ private struct AlbumTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ZStack(alignment: .bottomLeading) {
-                Rectangle()
-                    .fill(LinearGradient(
-                        colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
-                                 SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                if let url = artworkURL {
-                    CachedAsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        EmptyView()
+            // The square is `AlbumArtworkSquare`'s job, not this stack's: a
+            // non-square cover used to size its own tile and stagger the row.
+            AlbumArtworkSquare { AlbumArtworkImage(url: artworkURL) }
+                .overlay(alignment: .bottomLeading) {
+                    if let badge = album.badge, !badge.isEmpty {
+                        AlbumDuplicateBadge(text: badge)
+                            .padding(6)
                     }
                 }
-                if let badge = album.badge, !badge.isEmpty {
-                    AlbumDuplicateBadge(text: badge)
-                        .padding(6)
-                }
-            }
-            .aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
 
             Text(album.title)
                 .font(.system(size: 12, weight: .semibold))

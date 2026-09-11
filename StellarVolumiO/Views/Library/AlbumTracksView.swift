@@ -32,6 +32,7 @@ struct AlbumTracksView: View {
 
                     VStack(spacing: 4) {
                         Text(album.title.isEmpty ? "—" : album.title)
+                            .accessibilityIdentifier("album-tracks-title")
                             .font(StellarFont.titleLarge)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
@@ -119,20 +120,35 @@ private struct AlbumCoverHero: View {
     let host: String
     let port: Int
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.stellarIdiom) private var idiom
+
+    /// `heroSideCompact` is the size the iPhone shipped with and the size a
+    /// Slide Over pane still needs. A roomy canvas gets a larger cover; it is a
+    /// step rather than a ratio because the surrounding track list is a
+    /// fixed-width reading column, not a grid, so there is nothing for a
+    /// continuous scale to stay in proportion with.
+    ///
+    /// It is a *ceiling*, applied with `maxWidth` plus a 1:1 aspect ratio
+    /// rather than a fixed `width`. The step assumes the detail column is at
+    /// least as wide as the step, and that assumption does not hold: the
+    /// regular threshold is around 590 pt of window, and the sidebar takes
+    /// ~320 pt of it, so a narrow Stage Manager window can leave under 280 pt
+    /// of detail. A fixed frame would clip there; a ceiling shrinks.
+    private var side: CGFloat {
+        RootLayoutMode.isRoomy(horizontalSizeClass: horizontalSizeClass, idiom: idiom)
+            ? Stellar.Metric.heroSideRegular
+            : Stellar.Metric.heroSideCompact
+    }
+
     var body: some View {
-        Group {
-            if let url = artworkURL {
-                CachedAsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    placeholder
-                }
-            } else {
-                placeholder
-            }
+        // `side` is a ceiling on the width; the square follows from it. The
+        // artwork itself is an overlay inside `AlbumArtworkSquare` precisely so
+        // a non-square cover cannot push the hero past that ceiling.
+        AlbumArtworkSquare(cornerRadius: Stellar.Metric.artCornerRadius) {
+            AlbumArtworkImage(url: artworkURL)
         }
-        .frame(width: 240, height: 240)
-        .clipShape(RoundedRectangle(cornerRadius: Stellar.Metric.artCornerRadius))
+        .frame(maxWidth: side)
         .shadow(color: .black.opacity(Stellar.Shadow.albumArt.opacity),
                 radius: Stellar.Shadow.albumArt.radius,
                 y: Stellar.Shadow.albumArt.y)
@@ -145,16 +161,6 @@ private struct AlbumCoverHero: View {
         if s.hasPrefix("http") { return URL(string: s) }
         let path = s.hasPrefix("/") ? s : "/\(s)"
         return URL(string: "http://\(host):\(port)\(path)")
-    }
-
-    private var placeholder: some View {
-        Rectangle()
-            .fill(LinearGradient(
-                colors: [SwiftUI.Color(red: 0x2a/255, green: 0x35/255, blue: 0x48/255),
-                         SwiftUI.Color(red: 0x1a/255, green: 0x1f/255, blue: 0x2e/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ))
     }
 }
 

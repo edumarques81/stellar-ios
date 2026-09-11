@@ -22,19 +22,26 @@ struct NowPlayingView: View {
     @Environment(SocketService.self) private var socket
     @Environment(LastPlayedStore.self) private var lastPlayed
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.stellarIdiom) private var idiom
+
     var body: some View {
         ZStack {
             StellarGlassyBackground()
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    content
-                        .padding(.top, 24)
-                        .padding(.bottom, 24)
+            // Two trees, not one with a no-op branch. The roomy canvas needs a
+            // `GeometryReader` to centre the column against the pane height;
+            // the phone does not, and `GeometryReader` is not free — it sizes
+            // greedily and places its child `.topLeading`, which is exactly
+            // the kind of quiet difference REG-01 exists to prevent. The phone
+            // gets the tree it shipped with.
+            if centreVertically {
+                GeometryReader { geo in
+                    scroll(centringWithin: geo.size.height)
                 }
+            } else {
+                scroll(centringWithin: nil)
             }
-            .scrollIndicators(.hidden)
-            .contentMargins(.bottom, 16, for: .scrollContent)
         }
         // Re-fetch the AirPlay snapshot whenever the tab becomes visible.
         // Covers the case where the user backgrounds the app, an AirPlay
@@ -44,6 +51,42 @@ struct NowPlayingView: View {
         .onAppear {
             socket.requestAirplayState()
         }
+    }
+
+    /// The iPhone has always top-aligned and always fills its screen; leave it
+    /// alone (REG-01) and only centre on the roomier canvas. Asked through
+    /// `RootLayoutMode` rather than the size class alone, so the `idiom == .pad`
+    /// guard covers this too — a size class on its own is regular for an iPhone
+    /// Max in landscape.
+    private var centreVertically: Bool {
+        RootLayoutMode.isRoomy(horizontalSizeClass: horizontalSizeClass, idiom: idiom)
+    }
+
+    /// The scrolling column. `paneHeight` is non-nil only on the roomy canvas,
+    /// where the column is centred against it; on a phone the column is laid
+    /// out exactly as it always was.
+    private func scroll(centringWithin paneHeight: CGFloat?) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                content
+                    .padding(.top, 24)
+                    .padding(.bottom, 24)
+                    // Cap the column, then centre it. The hero is
+                    // `maxWidth: .infinity`, so without the cap it would grow
+                    // to whatever the iPad hands it — a 1000 pt cover with the
+                    // transport controls somewhere below the fold. No iPhone is
+                    // this wide, so the phone is unaffected.
+                    .frame(maxWidth: Stellar.Metric.contentMaxWidth)
+                    .frame(maxWidth: .infinity)
+            }
+            // On a tall iPad pane the column would otherwise sit jammed against
+            // the top with the bottom half empty. `minHeight` rather than
+            // `height`: when the content is taller than the pane — an 11" in
+            // landscape, say — it still lays out in full and scrolls.
+            .frame(minHeight: paneHeight ?? 0, alignment: .center)
+        }
+        .scrollIndicators(.hidden)
+        .contentMargins(.bottom, 16, for: .scrollContent)
     }
 
     @ViewBuilder

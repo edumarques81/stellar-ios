@@ -29,8 +29,10 @@ struct SeekBar: View {
 
             HStack {
                 Text(format(displayed))
+                    .accessibilityIdentifier("elapsed-time")
                 Spacer()
                 Text(format(totalSeconds))
+                    .accessibilityIdentifier("total-time")
             }
             .font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.secondary)
