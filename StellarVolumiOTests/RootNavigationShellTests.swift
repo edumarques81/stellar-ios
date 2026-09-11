@@ -168,4 +168,54 @@ final class RootNavigationShellTests: XCTestCase {
 
         withExtendedLifetime(hosted.env) {}
     }
+
+    // MARK: - Reconnect wiring
+
+    /// The root is where the reconnect hook lives, so it is the only place the
+    /// wiring can be proved. `IngestStore.socketDidConnect()` is what unsticks a
+    /// commit whose `pushIngestResult` was lost to a locked screen — the store
+    /// test covers the transition, this covers the fact that anything calls it.
+    ///
+    /// Both shells, because the hook sits on the outer `Group`: a version that
+    /// hung it off `compactTabs` would leave every iPad stuck instead.
+    func testReconnectUnsticksAStrandedCommitInBothShells() {
+        for (name, sizeClass, idiom, size) in [
+            ("tab bar", UIUserInterfaceSizeClass.compact, UIUserInterfaceIdiom.phone,
+             CGSize(width: 393, height: 852)),
+            ("sidebar", .regular, .pad, CGSize(width: 1194, height: 834)),
+        ] {
+            let hosted = hostRoot(horizontalSizeClass: sizeClass, idiom: idiom, size: size)
+
+            // Strand a commit: the plan is spent, the phase latched, and the
+            // result broadcast never arrives.
+            hosted.env.ingest.bind(to: hosted.env.socket)
+            hosted.env.ingest.apply(preview: IngestReport(
+                items: [IngestItem(name: "Nojima Plays Liszt", status: "would-ingest", audioFiles: 5)],
+                summary: IngestSummary(total: 1, wouldIngest: 1),
+                token: "plan-token"
+            ))
+            hosted.env.ingest.commit()
+            XCTAssertEqual(hosted.env.ingest.phase, .committing, "\(name): setup")
+
+            hosted.env.socket.connectionState = .connected
+            settle(hosted)
+
+            XCTAssertEqual(hosted.env.ingest.phase, .idle,
+                           "\(name): a reconnect must clear a phase whose reply can never arrive")
+
+            withExtendedLifetime(hosted.env) {}
+        }
+    }
+
+    /// SwiftUI applies an `onChange` on its own update cycle, not on the
+    /// assignment, so the observation has to be given a turn of the run loop
+    /// before it can be asserted on.
+    private func settle(_ hosted: Hosted) {
+        for _ in 0..<20 {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            hosted.container.view.layoutIfNeeded()
+            hosted.host.view.layoutIfNeeded()
+            if hosted.env.ingest.phase == .idle { return }
+        }
+    }
 }

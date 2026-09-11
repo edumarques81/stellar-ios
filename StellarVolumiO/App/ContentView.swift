@@ -74,6 +74,17 @@ struct ContentView: View {
             lcd.refresh()
             lcdView.refresh()
         }
+        // A reconnect is the only signal that a reply this app was waiting for
+        // can never arrive. `IngestStore.phase` latches on exactly that, and a
+        // commit runs for minutes: lock the screen during one and
+        // `pushIngestResult` — a one-shot broadcast — is lost, leaving the card
+        // on "Importing…" until the app is force-quit. Placed on the outer
+        // Group so both shells get it, and guarded on `.connected` so the
+        // connecting/disconnected churn does not re-emit.
+        .onChange(of: socket.connectionState) { _, state in
+            guard state == .connected else { return }
+            ingest.socketDidConnect()
+        }
     }
 
     /// The connection-failure banner — non-blocking, and only once the socket

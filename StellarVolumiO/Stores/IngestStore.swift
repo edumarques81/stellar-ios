@@ -99,6 +99,30 @@ final class IngestStore {
 
     // MARK: - Actions
 
+    /// Recovery hook for a socket that has just (re)connected.
+    ///
+    /// `phase` is a latch on a reply *this* device is waiting for, and a reply
+    /// can only arrive on the connection that carried the request. A commit
+    /// runs for minutes, so a locked screen or a Wi-Fi blip during one loses
+    /// `pushIngestResult` for good: it is a one-shot broadcast to whoever was
+    /// connected at the time, and the backend's connect-time replay only covers
+    /// a plan still awaiting confirmation, never a run that already finished.
+    /// Nothing else ever clears the latch, so the Import card sits on
+    /// "Importing…" until the app is force-quit — observed 2026-09-11, two and a
+    /// half hours after a four-minute commit had succeeded.
+    ///
+    /// A fresh connection is proof the awaited reply can never land, which
+    /// makes this the one moment the latch can be dropped without racing
+    /// anything. The plan itself is left alone: the backend replays a pending
+    /// one in its connect-time batch, and that batch races this hook, so
+    /// clearing it here could delete a replay that had already arrived. A plan
+    /// whose token was spent is cleared by the retryable error its next commit
+    /// returns.
+    func socketDidConnect() {
+        phase = .idle
+        requestStatus()
+    }
+
     /// Ask what is sitting in the inbox. Cheap: a directory listing, no script.
     func requestStatus() {
         socket?.emit("ingest:status")

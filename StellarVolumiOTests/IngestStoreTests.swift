@@ -193,6 +193,69 @@ final class IngestStoreTests: XCTestCase {
         XCTAssertEqual(store.phase, .idle)
     }
 
+    // MARK: - Reconnect recovery
+    //
+    // `phase` latches on a reply this device is waiting for, and a reply can
+    // only arrive on the connection that carried the request. A commit runs for
+    // minutes, so a locked screen or a Wi-Fi blip during one loses
+    // `pushIngestResult` for good — it is a one-shot broadcast to whoever was
+    // connected, and the backend's connect-time replay only covers a plan still
+    // awaiting confirmation, never a run that already finished. Observed
+    // 2026-09-11: a four-minute commit left the iPad on "Importing…" for two and
+    // a half hours. A fresh connection is proof the awaited reply can never
+    // land, so it is the one moment the latch can be cleared safely.
+
+    func testReconnectClearsAStrandedCommit() {
+        let store = IngestStore()
+        let socket = SocketService()
+        store.bind(to: socket)
+        store.apply(preview: armedPreview())
+        store.commit()
+        XCTAssertEqual(store.phase, .committing)
+
+        store.socketDidConnect()
+
+        XCTAssertEqual(store.phase, .idle, "the result can never arrive on this connection")
+        XCTAssertFalse(store.isBusy)
+    }
+
+    func testReconnectClearsAStrandedPreview() {
+        let store = IngestStore()
+        let socket = SocketService()
+        store.bind(to: socket)
+        store.previewInbox()
+        XCTAssertEqual(store.phase, .previewing)
+
+        store.socketDidConnect()
+
+        XCTAssertEqual(store.phase, .idle)
+    }
+
+    func testReconnectKeepsThePlanOnScreen() {
+        // The backend replays a still-pending plan in its connect-time batch,
+        // and that batch races this hook. Clearing the plan here would drop a
+        // replay that had already landed, so the latch is all that is touched;
+        // a plan whose token was spent is cleared by the retryable error the
+        // next commit attempt returns.
+        let store = IngestStore()
+        let socket = SocketService()
+        store.bind(to: socket)
+        store.apply(status: IngestStatus(count: 1, available: true))
+        store.apply(preview: armedPreview())
+
+        store.socketDidConnect()
+
+        XCTAssertNotNil(store.preview)
+        XCTAssertTrue(store.canCommit)
+        XCTAssertEqual(store.status?.count, 1, "status is re-requested, not invented")
+    }
+
+    func testReconnectWithoutASocketIsSafe() {
+        let store = IngestStore()
+        store.socketDidConnect()
+        XCTAssertEqual(store.phase, .idle)
+    }
+
     // MARK: - Dismissal
 
     func testCancelDropsThePlanButNotTheStatus() {
